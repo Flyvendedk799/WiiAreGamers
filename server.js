@@ -28,8 +28,8 @@ app.post('/api/start', (req, res) => {
         return res.json({ status: 'already_running' });
     }
 
-    // Use the bundled Homebrew ROM to guarantee an immediate playable state
-    const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.dol');
+    // Use the bundled Wii Sports ROM to guarantee an immediate playable state
+    const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.wbfs');
     
     // Spawn Dolphin in Xvfb (Virtual Framebuffer for headless mode)
     // Display :99 is commonly used.

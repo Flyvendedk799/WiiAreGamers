@@ -29,8 +29,8 @@ RUN cd frontend && npm run build
 # Copy backend source
 COPY . .
 
-# Download a tiny Homebrew game as a placeholder so Dolphin has something to boot immediately
-RUN curl -L -o /app/game.dol https://github.com/devkitPro/wii-examples/raw/master/graphics/gx/nehe/lesson1/lesson1.dol
+# Download Wii Sports as the default game for the emulator
+RUN curl -L -o /app/game.wbfs "https://archive.org/download/wii-sports-usa-rev-1/Wii%20Sports%20%28USA%29%20%28Rev%201%29.wbfs"
 
 # Ensure ROMs and Save directories exist
 RUN mkdir -p /root/.survhub/service-data/dolphin/roms
