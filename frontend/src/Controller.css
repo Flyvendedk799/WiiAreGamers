@@ -7,6 +7,19 @@
     background-color: #f0f0f0;
     color: #333;
     font-family: sans-serif;
+    
+    /* VERY IMPORTANT: Disable gestures so multi-touch works! */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+}
+
+.controller-ui * {
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .status {
@@ -64,6 +77,12 @@
     font-size: 1.5rem;
     color: white;
     border: none;
+}
+
+.action-buttons button:active,
+.d-pad button:active {
+    opacity: 0.7;
+    transform: scale(0.95);
 }
 
 .btn-a { background: #dc3545; }

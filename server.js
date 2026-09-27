@@ -60,7 +60,9 @@ app.post('/api/start', (req, res) => {
             '-C', 'Display.Fullscreen=True',
             '-C', 'Display.RenderWindowWidth=1280',
             '-C', 'Display.RenderWindowHeight=720',
-            '-C', 'Display.RenderToMain=True'
+            '-C', 'Display.RenderToMain=True',
+            '-C', 'Display.AspectRatio=3',
+            '-C', 'Display.KeepWindowOnTop=True'
         ], {
             env: {
                 ...process.env,
