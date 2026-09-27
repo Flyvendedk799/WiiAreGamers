@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "jsmpeg-player": "^3.0.3",
+    "@cycjimmy/jsmpeg-player": "^6.1.2",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "socket.io-client": "^4.8.4"
