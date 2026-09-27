@@ -55,7 +55,13 @@ app.post('/api/start', (req, res) => {
 
     // Give Xvfb a moment to boot
     setTimeout(() => {
-        emulatorProcess = spawn(dolphinPath, ['-e', romPath], {
+        emulatorProcess = spawn(dolphinPath, [
+            '-e', romPath,
+            '-C', 'Display.Fullscreen=True',
+            '-C', 'Display.RenderWindowWidth=1280',
+            '-C', 'Display.RenderWindowHeight=720',
+            '-C', 'Display.RenderToMain=True'
+        ], {
             env: {
                 ...process.env,
                 DISPLAY: ':99',
@@ -119,26 +125,71 @@ app.post('/api/stop', (req, res) => {
 const { DSUPacker } = require('./dsu-packer');
 const dsu = new DSUPacker();
 
-// Store latest controller state to continuously broadcast if needed, or send on update
-const controllerState = {
-    buttons: {},
-    gyro: { pitch: 0, yaw: 0, roll: 0 },
-    accel: { x: 0, y: -1, z: 0 }
+// Store latest controller state per slot (0 to 3)
+const controllerStates = {
+    0: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
+    1: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
+    2: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
+    3: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } }
 };
+
+let currentPartyCode = null;
+let activePlayers = []; // index = slot, value = socket.id
 
 // Handle WebSocket controller inputs from our custom mobile web UI
 io.on('connection', (socket) => {
-    console.log('Client connected for controller input via Socket.io');
-    
-    socket.on('controller-input', (data) => {
-        if (data.type === 'gyro') {
-            controllerState.gyro = { pitch: data.alpha, yaw: data.beta, roll: data.gamma };
-        } else if (data.type === 'button') {
-            controllerState.buttons[data.btn] = data.state;
-        }
+    console.log('Client connected via Socket.io:', socket.id);
 
-        const dsuPacket = dsu.createControllerPacket(controllerState);
-        udpSocket.send(dsuPacket, 26760, '127.0.0.1');
+    // Host creates a party
+    socket.on('create-party', () => {
+        currentPartyCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+        activePlayers = []; // Reset players on new party
+        socket.emit('party-created', currentPartyCode);
+        console.log('Party created:', currentPartyCode);
+    });
+
+    // Mobile joins a party
+    socket.on('join-party', (code) => {
+        if (code.toUpperCase() === currentPartyCode) {
+            let slot = activePlayers.indexOf(socket.id);
+            if (slot === -1) {
+                if (activePlayers.length < 4) {
+                    slot = activePlayers.length;
+                    activePlayers.push(socket.id);
+                } else {
+                    return socket.emit('join-error', 'Party is full');
+                }
+            }
+            socket.emit('joined-party', slot + 1); // 1-indexed for UI display
+            io.emit('player-joined', slot + 1);
+            console.log(`Player joined slot ${slot}`);
+        } else {
+            socket.emit('join-error', 'Invalid party code');
+        }
+    });
+
+    socket.on('controller-input', (data) => {
+        const slot = activePlayers.indexOf(socket.id);
+        if (slot !== -1) {
+            const state = controllerStates[slot];
+            if (data.type === 'gyro') {
+                state.gyro = { pitch: data.alpha, yaw: data.beta, roll: data.gamma };
+            } else if (data.type === 'button') {
+                state.buttons[data.btn] = data.state;
+            }
+
+            const dsuPacket = dsu.createControllerPacket(state, slot);
+            udpSocket.send(dsuPacket, 26760, '127.0.0.1');
+        }
+    });
+
+    socket.on('disconnect', () => {
+        const slot = activePlayers.indexOf(socket.id);
+        if (slot !== -1) {
+            // We could remove them, but for now we leave the slot reserved until party reset
+            // so they can reconnect if they refresh.
+            console.log(`Player ${slot} disconnected`);
+        }
     });
 });
 

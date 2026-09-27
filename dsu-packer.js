@@ -6,7 +6,7 @@ class DSUPacker {
         this.packetId = 0;
     }
 
-    createControllerPacket(data) {
+    createControllerPacket(data, slot = 0) {
         this.packetId++;
         const buffer = Buffer.alloc(100);
 
@@ -19,7 +19,7 @@ class DSUPacker {
 
         // --- PAYLOAD (84 bytes) ---
         buffer.writeUInt32LE(0x100002, 16); // Message type: Controller Data
-        buffer.writeUInt8(0, 20); // Slot
+        buffer.writeUInt8(slot, 20); // Slot
         buffer.writeUInt8(2, 21); // Slot State: Connected
         buffer.writeUInt8(2, 22); // Device Model: Full Gyro
         buffer.writeUInt8(1, 23); // Connection Type: USB
@@ -30,7 +30,7 @@ class DSUPacker {
         buffer.writeUInt8(0x22, 26);
         buffer.writeUInt8(0x33, 27);
         buffer.writeUInt8(0x44, 28);
-        buffer.writeUInt8(0x55, 29);
+        buffer.writeUInt8(0x55 + slot, 29);
 
         buffer.writeUInt8(5, 30); // Battery status: Full
         buffer.writeUInt8(1, 31); // Device state: Active

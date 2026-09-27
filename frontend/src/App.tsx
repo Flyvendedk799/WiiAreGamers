@@ -1,20 +1,35 @@
 import { useState, useEffect, useRef } from 'react'
+import io from 'socket.io-client';
 // @ts-ignore
 import JSMpeg from '@cycjimmy/jsmpeg-player'
 import './App.css'
 
+const socket = io(window.location.origin, { transports: ['websocket'] });
+
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [partyCode, setPartyCode] = useState<string | null>(null);
+  const [players, setPlayers] = useState<number[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playerRef = useRef<any>(null);
 
   useEffect(() => {
-    // We only mount the video player when playing
+    socket.on('party-created', (code) => setPartyCode(code));
+    socket.on('player-joined', (slot) => {
+      setPlayers(prev => prev.includes(slot) ? prev : [...prev, slot]);
+    });
+
+    return () => {
+      socket.off('party-created');
+      socket.off('player-joined');
+    };
+  }, []);
+
+  useEffect(() => {
     if (isPlaying && canvasRef.current && !playerRef.current) {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const videoUrl = `${wsProtocol}//${window.location.host}/video-stream`;
       
-      // JSMPEG decodes MPEG1 video stream directly in WebGL/Canvas
       playerRef.current = new JSMpeg.VideoElement(
         '#video-wrapper',
         videoUrl,
@@ -46,6 +61,10 @@ function App() {
     setIsPlaying(false);
   };
 
+  const createParty = () => {
+    socket.emit('create-party');
+  };
+
   return (
     <div className="App">
       <header>
@@ -67,16 +86,26 @@ function App() {
         ) : (
           <div className="library">
             <p>Select a game to begin streaming.</p>
-            {/* Game library UI goes here */}
             <div className="game-card">
               <h3>Wii Sports</h3>
             </div>
           </div>
         )}
 
-        <div className="controller-link">
-          <p>Playing on desktop? Open this URL on your phone for Gyro Controls:</p>
-          <a href="/controller" target="_blank">Mobile Controller</a>
+        <div className="controller-link" style={{ marginTop: '40px' }}>
+          {!partyCode ? (
+            <button onClick={createParty} style={{ padding: '10px 20px', fontSize: '1.2rem', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+              Create Mobile Party
+            </button>
+          ) : (
+            <div style={{ background: '#222', padding: '20px', borderRadius: '8px' }}>
+              <h2 style={{ margin: 0 }}>Party Code: <span style={{ color: '#00ff88', letterSpacing: '2px' }}>{partyCode}</span></h2>
+              <p>Scan or open on your phone: <a href="/controller" target="_blank" rel="noreferrer">/controller</a></p>
+              <p style={{ marginTop: '10px', fontSize: '1.1rem' }}>
+                Players Joined: {players.length === 0 ? "None yet" : players.map(p => `Player ${p}`).join(', ')}
+              </p>
+            </div>
+          )}
         </div>
       </main>
     </div>
