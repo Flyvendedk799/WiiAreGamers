@@ -49,7 +49,7 @@ app.post('/api/start', (req, res) => {
     const xvfbProcess = spawn('Xvfb', [
         ':99',
         '-screen', '0',
-        '1280x720x24',
+        '854x480x24',
         '-ac'
     ]);
 
@@ -57,12 +57,7 @@ app.post('/api/start', (req, res) => {
     setTimeout(() => {
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
-            '-C', 'Display.Fullscreen=True',
-            '-C', 'Display.RenderWindowWidth=1280',
-            '-C', 'Display.RenderWindowHeight=720',
-            '-C', 'Display.RenderToMain=True',
-            '-C', 'Display.AspectRatio=3',
-            '-C', 'Display.KeepWindowOnTop=True'
+            '-C', 'Display.Fullscreen=True'
         ], {
             env: {
                 ...process.env,
@@ -84,12 +79,12 @@ app.post('/api/start', (req, res) => {
         // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
-            '-video_size', '1280x720',
+            '-video_size', '854x480',
             '-r', '30',
             '-i', ':99',
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
-            '-s', '1280x720',
+            '-s', '854x480',
             '-b:v', '2000k',
             '-bf', '0',
             '-'
