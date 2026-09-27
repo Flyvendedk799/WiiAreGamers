@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     fluxbox \
     ffmpeg \
     xdotool \
+    python3 \
+    python3-xlib \
     dolphin-emu \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \

@@ -43,7 +43,7 @@ app.post('/api/start', (req, res) => {
     // Use the bundled Wii Sports ROM to guarantee an immediate playable state
     const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.wbfs');
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
-    const dolphinPath = '/usr/games/dolphin-emu';
+    const dolphinPath = '/usr/games/dolphin-emu-nogui';
     
     // Spawn Xvfb manually with access control disabled (-ac)
     const xvfbProcess = spawn('Xvfb', [
@@ -61,7 +61,9 @@ app.post('/api/start', (req, res) => {
 
 
         emulatorProcess = spawn(dolphinPath, [
-            '-b', '-e', romPath
+            '-e', romPath,
+            '-p', 'x11',
+            '-C', 'Display.Fullscreen=True'
         ], {
             env: {
                 ...process.env,
@@ -201,13 +203,13 @@ io.on('connection', (socket) => {
             } else if (data.type === 'button') {
                 state.buttons[data.btn] = data.state;
                 if (data.btn === 'A' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key Return', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py Return --hold 0.1', (err) => {});
                 }
                 if (data.btn === 'B' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key space', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py space --hold 0.1', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 bash -c "xdotool keydown Return space; sleep 0.3; xdotool keyup Return space"', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py Return space --hold 0.5', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
