@@ -193,6 +193,20 @@ io.on('connection', (socket) => {
                 state.gyro = { pitch: data.alpha, yaw: data.beta, roll: data.gamma };
             } else if (data.type === 'button') {
                 state.buttons[data.btn] = data.state;
+                if (data.btn === 'A' && data.state) {
+                    require('child_process').exec('DISPLAY=:99 xdotool key a', (err) => {});
+                }
+                if (data.btn === 'B' && data.state) {
+                    require('child_process').exec('DISPLAY=:99 xdotool key b', (err) => {});
+                }
+                if (data.btn === 'AB' && data.state) {
+                    require('child_process').exec('DISPLAY=:99 xdotool key a b', (err) => {});
+                    state.buttons['A'] = true;
+                    state.buttons['B'] = true;
+                } else if (data.btn === 'AB' && !data.state) {
+                    state.buttons['A'] = false;
+                    state.buttons['B'] = false;
+                }
             }
 
             // Only send to Dolphin if Dolphin has subscribed via DSU Handshake
