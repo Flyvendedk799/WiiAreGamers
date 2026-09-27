@@ -408,7 +408,7 @@ io.on('connection', (socket) => {
 
 // Provide a fallback route for react router
 app.use((req, res, next) => {
-    if (req.method === 'GET') {
+    if (req.method === 'GET' || req.method === 'HEAD') {
         res.sendFile(path.join(__dirname, 'frontend/dist/index.html'));
     } else {
         next();
