@@ -192,7 +192,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('controller-input', (data) => {
-        const slot = activePlayers.indexOf(socket.id);
+        let slot = activePlayers.indexOf(socket.id);
+        if (slot === -1 && currentPartyCode) slot = 0;
         if (slot !== -1) {
             const state = controllerStates[slot];
             if (data.type === 'gyro') {
@@ -206,7 +207,7 @@ io.on('connection', (socket) => {
                     require('child_process').exec('DISPLAY=:99 xdotool key space', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool keydown Return keydown space sleep 0.1 keyup Return keyup space', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 bash -c "xdotool keydown Return; xdotool keydown space; sleep 0.1; xdotool keyup Return; xdotool keyup space"', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {

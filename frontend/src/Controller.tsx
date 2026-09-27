@@ -146,9 +146,12 @@ export default function Controller() {
             <div style={{ marginTop: '20px' }}>
                 <button 
                     className="btn-ab"
-                    onPointerDown={() => handleButton('AB', true)} 
-                    onPointerUp={() => handleButton('AB', false)}
-                    style={{ padding: '15px 30px', fontSize: '1.2rem', background: '#ffaa00', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
+                    onTouchStart={(e) => { e.preventDefault(); handleButton('AB', true); }} 
+                    onTouchEnd={(e) => { e.preventDefault(); handleButton('AB', false); }}
+                    onMouseDown={(e) => { e.preventDefault(); handleButton('AB', true); }} 
+                    onMouseUp={(e) => { e.preventDefault(); handleButton('AB', false); }}
+                    onMouseLeave={() => handleButton('AB', false)}
+                    style={{ padding: '15px 30px', fontSize: '1.2rem', background: '#ffaa00', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
                     Press A+B (Menu)
                 </button>
