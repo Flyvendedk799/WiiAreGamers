@@ -45,56 +45,63 @@ app.post('/api/start', (req, res) => {
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
     const dolphinPath = '/usr/games/dolphin-emu-nogui';
     
-    // Spawn Dolphin in Xvfb (Virtual Framebuffer for headless mode)
-    // Display :99 is commonly used. Disable MIT-SHM to avoid Docker 64MB /dev/shm limits causing Bus Errors.
-    emulatorProcess = spawn('xvfb-run', [
-        '-n', '99',
-        '-s', '-screen 0 1280x720x24 -extension MIT-SHM',
-        dolphinPath,
-        '-e', romPath
-    ], {
-        env: {
-            ...process.env,
-            QT_X11_NO_MITSHM: '1',
-            XDG_RUNTIME_DIR: '/tmp'
-        }
-    });
-
-    emulatorProcess.stdout.on('data', (data) => console.log('Dolphin stdout:', data.toString()));
-    emulatorProcess.stderr.on('data', (data) => console.error('Dolphin stderr:', data.toString()));
-
-    emulatorProcess.on('close', (code) => {
-        console.log(`Emulator stopped with code ${code}`);
-        emulatorProcess = null;
-        if (streamProcess) streamProcess.kill();
-    });
-
-    // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
-    streamProcess = spawn('ffmpeg', [
-        '-f', 'x11grab',
-        '-video_size', '1280x720',
-        '-r', '30',
-        '-i', ':99',
-        '-f', 'mpegts',
-        '-codec:v', 'mpeg1video',
-        '-s', '1280x720',
-        '-b:v', '2000k',
-        '-bf', '0',
-        '-'
+    // Spawn Xvfb manually with access control disabled (-ac) so ffmpeg can connect without Xauthority
+    const xvfbProcess = spawn('Xvfb', [
+        ':99',
+        '-screen', '0',
+        '1280x720x24',
+        '-extension', 'MIT-SHM',
+        '-ac'
     ]);
 
-    streamProcess.stdout.on('data', (data) => {
-        // Broadcast raw video binary data to connected websocket clients
-        wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(data);
+    // Give Xvfb a moment to boot
+    setTimeout(() => {
+        emulatorProcess = spawn(dolphinPath, ['-e', romPath], {
+            env: {
+                ...process.env,
+                DISPLAY: ':99',
+                QT_X11_NO_MITSHM: '1',
+                XDG_RUNTIME_DIR: '/tmp'
             }
         });
-    });
 
-    streamProcess.stderr.on('data', (data) => {
-        // console.log(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
-    });
+        emulatorProcess.stdout.on('data', (data) => console.log('Dolphin stdout:', data.toString()));
+        emulatorProcess.stderr.on('data', (data) => console.error('Dolphin stderr:', data.toString()));
+
+        emulatorProcess.on('close', (code) => {
+            console.log(`Emulator stopped with code ${code}`);
+            emulatorProcess = null;
+            if (streamProcess) streamProcess.kill();
+            xvfbProcess.kill();
+        });
+
+        // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
+        streamProcess = spawn('ffmpeg', [
+            '-f', 'x11grab',
+            '-video_size', '1280x720',
+            '-r', '30',
+            '-i', ':99',
+            '-f', 'mpegts',
+            '-codec:v', 'mpeg1video',
+            '-s', '1280x720',
+            '-b:v', '2000k',
+            '-bf', '0',
+            '-'
+        ]);
+
+        streamProcess.stdout.on('data', (data) => {
+            // Broadcast raw video binary data to connected websocket clients
+            wss.clients.forEach((client) => {
+                if (client.readyState === WebSocket.OPEN) {
+                    client.send(data);
+                }
+            });
+        });
+
+        streamProcess.stderr.on('data', (data) => {
+            console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
+        });
+    }, 500);
 
     res.json({ status: 'started' });
 });
