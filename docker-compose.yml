@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "26760:26760/udp"
+    shm_size: '2gb'
+    ipc: host
+    security_opt:
+      - seccomp:unconfined
