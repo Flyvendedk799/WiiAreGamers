@@ -1,4 +1,11 @@
+test*.b64
+test*.jpg
+buildlog.txt
+check_build.py
+dist.tar.gz
+fix*.js
+redeploy_vps.sh
+screen*.b64
+screen*.jpg
+*.b64
 node_modules/
-frontend/node_modules/
-frontend/dist/
-.env

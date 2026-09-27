@@ -111,12 +111,13 @@ app.post('/api/start', (req, res) => {
             xvfbProcess.kill();
         });
 
-        // Start FFmpeg to capture both video and stereo audio with synchronized zero-latency streaming at full 60 FPS
+        // Start FFmpeg to capture video and stereo audio — 30fps capture to minimize CPU overhead
+        // (Dolphin renders internally at 60fps; 30fps stream is plenty for web viewing and saves ~40% CPU)
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
             '-thread_queue_size', '512',
             '-video_size', '854x480',
-            '-framerate', '60',
+            '-framerate', '30',
             '-i', ':99',
             '-f', 'pulse',
             '-thread_queue_size', '512',
@@ -124,13 +125,14 @@ app.post('/api/start', (req, res) => {
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
             '-s', '854x480',
-            '-b:v', '2800k',
-            '-maxrate', '3500k',
-            '-bufsize', '1000k',
+            '-b:v', '1800k',
+            '-maxrate', '2200k',
+            '-bufsize', '800k',
             '-bf', '0',
-            '-g', '30',
+            '-g', '15',
             '-qmin', '2',
-            '-qmax', '6',
+            '-qmax', '8',
+            '-threads', '2',
             '-muxdelay', '0.001',
             '-codec:a', 'mp2',
             '-ar', '44100',
