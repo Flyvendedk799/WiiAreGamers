@@ -164,6 +164,7 @@ udpSocket.on('message', (msg, rinfo) => {
         } else if (type === 0x100002) {
             // Dolphin requesting Pad Data
             const padId = msg.length > 21 ? msg.readUInt8(21) : 0;
+            dolphinSubscribers.set(clientKey, { address: rinfo.address, port: rinfo.port, padId, lastSeen: Date.now() });
             const state = controllerStates[padId] || controllerStates[0];
             const packet = dsu.createControllerPacket(state, padId);
             udpSocket.send(packet, rinfo.port, rinfo.address);
@@ -205,11 +206,10 @@ setInterval(() => {
             dolphinSubscribers.delete(key);
             continue;
         }
-        for (let s = 0; s < 4; s++) {
-            const state = controllerStates[s];
-            const packet = dsu.createControllerPacket(state, s);
-            udpSocket.send(packet, client.port, client.address);
-        }
+        const padId = client.padId !== undefined ? client.padId : 0;
+        const state = controllerStates[padId] || controllerStates[0];
+        const packet = dsu.createControllerPacket(state, padId);
+        udpSocket.send(packet, client.port, client.address);
     }
 }, 16);
 
@@ -263,8 +263,10 @@ io.on('connection', (socket) => {
 
         // Send immediate UDP packet to subscribers on input change
         for (const [key, client] of dolphinSubscribers.entries()) {
-            const dsuPacket = dsu.createControllerPacket(state, slot);
-            udpSocket.send(dsuPacket, client.port, client.address);
+            if (client.padId === undefined || client.padId === slot) {
+                const dsuPacket = dsu.createControllerPacket(state, slot);
+                udpSocket.send(dsuPacket, client.port, client.address);
+            }
         }
     });
 
