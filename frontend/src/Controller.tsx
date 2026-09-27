@@ -133,13 +133,19 @@ export default function Controller() {
             <div className="action-buttons">
                 <button 
                     className="btn-a"
-                    onPointerDown={() => handleButton('A', true)} 
-                    onPointerUp={() => handleButton('A', false)}
+                    onTouchStart={(e) => { e.preventDefault(); handleButton('A', true); }} 
+                    onTouchEnd={(e) => { e.preventDefault(); handleButton('A', false); }}
+                    onMouseDown={(e) => { e.preventDefault(); handleButton('A', true); }} 
+                    onMouseUp={(e) => { e.preventDefault(); handleButton('A', false); }}
+                    style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >A</button>
                 <button 
                     className="btn-b"
-                    onPointerDown={() => handleButton('B', true)} 
-                    onPointerUp={() => handleButton('B', false)}
+                    onTouchStart={(e) => { e.preventDefault(); handleButton('B', true); }} 
+                    onTouchEnd={(e) => { e.preventDefault(); handleButton('B', false); }}
+                    onMouseDown={(e) => { e.preventDefault(); handleButton('B', true); }} 
+                    onMouseUp={(e) => { e.preventDefault(); handleButton('B', false); }}
+                    style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >B</button>
             </div>
             

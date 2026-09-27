@@ -141,28 +141,51 @@ const controllerStates = {
 let currentPartyCode = null;
 let activePlayers = []; // index = slot, value = socket.id
 
-let dolphinClient = null; // { port, address }
+const dolphinSubscribers = new Map(); // key: "address:port" -> { address, port, lastSeen }
 
-// Handle DSU Handshakes from Dolphin
+// Handle DSU Handshakes and Data Requests from Dolphin
 udpSocket.on('message', (msg, rinfo) => {
-    console.log(`UDP msg from ${rinfo.address}:${rinfo.port}, len=${msg.length}, magic=${msg.toString('ascii', 0, 4)}`);
-    // Basic verification of Magic String
     if (msg.length >= 20 && msg.toString('ascii', 0, 4) === 'DSUC') {
         const type = msg.readUInt32LE(16);
-        console.log(`DSU message type: 0x${type.toString(16)}`);
+        const clientKey = `${rinfo.address}:${rinfo.port}`;
+        dolphinSubscribers.set(clientKey, { address: rinfo.address, port: rinfo.port, lastSeen: Date.now() });
+
         if (type === 0x100000) {
-            // Dolphin requesting Ports Info
-            dolphinClient = rinfo;
-            const res = dsu.createPortsInfoPacket();
+            // Dolphin requesting Protocol Version
+            const res = dsu.createVersionResponsePacket();
             udpSocket.send(res, rinfo.port, rinfo.address);
-            console.log('DSU Handshake with Dolphin successful!', rinfo);
         } else if (type === 0x100001) {
-            // Dolphin subscribing to controller data
-            dolphinClient = rinfo;
-            console.log('Dolphin subscribed to controller data!', rinfo);
+            // Dolphin requesting Ports Info (ListPorts)
+            for (let s = 0; s < 4; s++) {
+                const res = dsu.createPortsInfoPacket(s);
+                udpSocket.send(res, rinfo.port, rinfo.address);
+            }
+        } else if (type === 0x100002) {
+            // Dolphin requesting Pad Data
+            const padId = msg.length > 21 ? msg.readUInt8(21) : 0;
+            const state = controllerStates[padId] || controllerStates[0];
+            const packet = dsu.createControllerPacket(state, padId);
+            udpSocket.send(packet, rinfo.port, rinfo.address);
         }
     }
 });
+
+// Broadcast continuous controller state at 60Hz to all active Dolphin subscribers
+setInterval(() => {
+    if (dolphinSubscribers.size === 0) return;
+    const now = Date.now();
+    for (const [key, client] of dolphinSubscribers.entries()) {
+        if (now - client.lastSeen > 10000) {
+            dolphinSubscribers.delete(key);
+            continue;
+        }
+        for (let s = 0; s < 4; s++) {
+            const state = controllerStates[s];
+            const packet = dsu.createControllerPacket(state, s);
+            udpSocket.send(packet, client.port, client.address);
+        }
+    }
+}, 16);
 
 // Handle WebSocket controller inputs from our custom mobile web UI
 io.on('connection', (socket) => {
@@ -198,38 +221,24 @@ io.on('connection', (socket) => {
 
     socket.on('controller-input', (data) => {
         let slot = activePlayers.indexOf(socket.id);
-        if (slot === -1 && currentPartyCode) slot = 0;
-        if (slot !== -1) {
-            const state = controllerStates[slot];
-            if (data.type === 'gyro') {
-                state.gyro = { pitch: data.alpha, yaw: data.beta, roll: data.gamma };
-            } else if (data.type === 'button') {
-                state.buttons[data.btn] = data.state;
-                if (data.btn === 'A' && data.state) {
-                    // Handled natively by DSU now
-                }
-                if (data.btn === 'B' && data.state) {
-                    // Handled natively by DSU now
-                }
-                if (data.btn === 'AB' && data.state) {
-                    state.buttons['A'] = true;
-                    state.buttons['B'] = true;
-                } else if (data.btn === 'AB' && !data.state) {
-                    state.buttons['A'] = false;
-                    state.buttons['B'] = false;
-                }
-            }
+        if (slot === -1) slot = 0; // Default to player 1
 
-            // Only send to Dolphin if Dolphin has subscribed via DSU Handshake
-            if (dolphinClient) {
-                const dsuPacket = dsu.createControllerPacket(state, slot);
-                udpSocket.send(dsuPacket, dolphinClient.port, dolphinClient.address);
+        const state = controllerStates[slot];
+        if (data.type === 'gyro') {
+            state.gyro = { pitch: data.alpha || 0, yaw: data.beta || 0, roll: data.gamma || 0 };
+        } else if (data.type === 'button') {
+            state.buttons[data.btn] = data.state;
+            if (data.btn === 'AB') {
+                state.buttons['A'] = !!data.state;
+                state.buttons['B'] = !!data.state;
             }
-            
-            // Broadcast debug state to host display
-            if (data.type === 'button') {
-                io.emit('debug-input', { slot, btn: data.btn, state: data.state });
-            }
+            io.emit('debug-input', { slot, btn: data.btn, state: data.state });
+        }
+
+        // Send immediate UDP packet to subscribers on input change
+        for (const [key, client] of dolphinSubscribers.entries()) {
+            const dsuPacket = dsu.createControllerPacket(state, slot);
+            udpSocket.send(dsuPacket, client.port, client.address);
         }
     });
 
