@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   app:
+    container_name: survhub-Zyd6miHws0qb7c0WgN3P9
     build: .
     restart: unless-stopped
     ports:
