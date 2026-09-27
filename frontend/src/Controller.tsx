@@ -146,8 +146,8 @@ export default function Controller() {
             <div style={{ marginTop: '20px' }}>
                 <button 
                     className="btn-ab"
-                    onPointerDown={() => { handleButton('A', true); handleButton('B', true); }} 
-                    onPointerUp={() => { handleButton('A', false); handleButton('B', false); }}
+                    onPointerDown={() => handleButton('AB', true)} 
+                    onPointerUp={() => handleButton('AB', false)}
                     style={{ padding: '15px 30px', fontSize: '1.2rem', background: '#ffaa00', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold' }}
                 >
                     Press A+B (Menu)

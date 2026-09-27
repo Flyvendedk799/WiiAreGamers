@@ -57,6 +57,7 @@ app.post('/api/start', (req, res) => {
     setTimeout(() => {
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
+            '-p', 'x11',
             '-C', 'Display.Fullscreen=True'
         ], {
             env: {
@@ -194,13 +195,13 @@ io.on('connection', (socket) => {
             } else if (data.type === 'button') {
                 state.buttons[data.btn] = data.state;
                 if (data.btn === 'A' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key a', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 xdotool key Return', (err) => {});
                 }
                 if (data.btn === 'B' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key b', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 xdotool key space', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key a b', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 xdotool key Return+space', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
