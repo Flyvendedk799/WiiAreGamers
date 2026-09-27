@@ -13,6 +13,17 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playerRef = useRef<any>(null);
 
+  // Check if emulator is already running on mount
+  useEffect(() => {
+    fetch('/api/status')
+      .then(res => res.json())
+      .then(data => {
+        if (data.running) setIsPlaying(true);
+        if (data.partyCode) setPartyCode(data.partyCode);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     socket.on('party-created', (code) => setPartyCode(code));
     socket.on('player-joined', (slot) => {
@@ -65,6 +76,22 @@ function App() {
     socket.emit('create-party');
   };
 
+  const pressButton = (btn: string) => {
+    fetch('/api/press-button', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ btn, slot: 0 })
+    }).catch(() => {});
+  };
+
+  const triggerSwing = () => {
+    fetch('/api/swing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slot: 0 })
+    }).catch(() => {});
+  };
+
   const toggleFullscreen = () => {
     const el = document.getElementById('video-wrapper');
     if (!el) return;
@@ -75,15 +102,17 @@ function App() {
     }
   };
 
+  const joinUrl = partyCode ? `${window.location.origin}/controller?code=${partyCode}` : `${window.location.origin}/controller`;
+
   return (
     <div className="App">
       <header>
-        <h1>Dolphin Cloud Gaming</h1>
+        <h1>Wii Are Gamers</h1>
         <div className="controls">
           {!isPlaying ? (
-            <button onClick={startGame}>Start Game</button>
+            <button onClick={startGame} className="btn-primary">▶ Start Stream</button>
           ) : (
-            <button onClick={stopGame}>Stop Game</button>
+            <button onClick={stopGame} className="btn-danger">⏹ Stop Stream</button>
           )}
         </div>
       </header>
@@ -99,36 +128,76 @@ function App() {
               maxWidth: '960px', 
               margin: '0 auto', 
               background: '#000', 
-              borderRadius: '8px', 
+              borderRadius: '12px', 
               overflow: 'hidden',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
+              boxShadow: '0 12px 40px rgba(0,0,0,0.7)'
             }}
           >
             <canvas 
               ref={canvasRef} 
               id="video-canvas"
-              style={{ width: '100%', height: 'auto', display: 'block', aspectRatio: '16/9' }}
+              onClick={() => pressButton('A')}
+              title="Click to press A"
+              style={{ width: '100%', height: 'auto', display: 'block', aspectRatio: '16/9', cursor: 'pointer' }}
             ></canvas>
 
-            <button 
-              onClick={() => fetch('/api/press-ab', { method: 'POST' }).catch(() => {})}
-              style={{
-                position: 'absolute',
-                bottom: 12,
-                left: 12,
-                background: '#ffaa00',
-                color: '#000',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                zIndex: 10,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
-              }}
-            >
-              Press A+B (Menu)
-            </button>
+            {/* Quick Action Overlay Controls */}
+            <div style={{
+              position: 'absolute',
+              bottom: 12,
+              left: 12,
+              display: 'flex',
+              gap: '8px',
+              zIndex: 10
+            }}>
+              <button 
+                onClick={triggerSwing}
+                style={{
+                  background: 'linear-gradient(135deg, #ff6b35, #f72585)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                }}
+              >
+                🎾 Swing / Hit
+              </button>
+
+              <button 
+                onClick={() => pressButton('A')}
+                style={{
+                  background: '#0088ff',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                }}
+              >
+                A Button
+              </button>
+
+              <button 
+                onClick={() => fetch('/api/press-ab', { method: 'POST' }).catch(() => {})}
+                style={{
+                  background: '#ffaa00',
+                  color: '#000',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                }}
+              >
+                Press A+B
+              </button>
+            </div>
 
             <button 
               onClick={toggleFullscreen}
@@ -139,7 +208,7 @@ function App() {
                 background: 'rgba(0,0,0,0.7)',
                 color: '#fff',
                 border: '1px solid #666',
-                padding: '8px 16px',
+                padding: '8px 14px',
                 borderRadius: '6px',
                 fontWeight: 'bold',
                 cursor: 'pointer',
@@ -152,24 +221,61 @@ function App() {
         ) : (
           <div className="library">
             <p>Select a game to begin streaming.</p>
-            <div className="game-card">
-              <h3>Wii Sports</h3>
+            <div className="game-card" onClick={startGame}>
+              <h3>🎾 Wii Sports</h3>
             </div>
           </div>
         )}
 
-        <div className="controller-link" style={{ marginTop: '40px' }}>
+        <div className="controller-link" style={{ marginTop: '30px' }}>
           {!partyCode ? (
-            <button onClick={createParty} style={{ padding: '10px 20px', fontSize: '1.2rem', background: '#007bff', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-              Create Mobile Party
+            <button 
+              onClick={createParty} 
+              style={{ 
+                padding: '12px 28px', 
+                fontSize: '1.2rem', 
+                background: 'linear-gradient(135deg, #0088ff, #0055cc)', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '8px', 
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(0, 136, 255, 0.4)'
+              }}
+            >
+              📱 Connect Phones as Wiimotes
             </button>
           ) : (
-            <div style={{ background: '#222', padding: '20px', borderRadius: '8px' }}>
-              <h2 style={{ margin: 0 }}>Party Code: <span style={{ color: '#00ff88', letterSpacing: '2px' }}>{partyCode}</span></h2>
-              <p>Scan or open on your phone: <a href="/controller" target="_blank" rel="noreferrer">/controller</a></p>
-              <p style={{ marginTop: '10px', fontSize: '1.1rem' }}>
-                Players Joined: {players.length === 0 ? "None yet" : players.map(p => `Player ${p}`).join(', ')}
+            <div style={{ 
+              background: 'rgba(255, 255, 255, 0.05)', 
+              border: '1px solid rgba(255, 255, 255, 0.1)', 
+              padding: '24px', 
+              borderRadius: '16px', 
+              maxWidth: '480px', 
+              margin: '0 auto',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.5)'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
+                Party Code: <span style={{ color: '#00ff88', letterSpacing: '3px', fontWeight: 900 }}>{partyCode}</span>
+              </h2>
+              
+              <div style={{ margin: '16px 0' }}>
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(joinUrl)}`} 
+                  alt="Scan to join" 
+                  style={{ borderRadius: '10px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', background: '#fff', padding: '6px' }} 
+                />
+              </div>
+
+              <p style={{ fontSize: '0.95rem', color: '#ccc' }}>
+                Scan QR or open on phone: <br />
+                <a href={joinUrl} target="_blank" rel="noreferrer" style={{ color: '#00aaff', wordBreak: 'break-all' }}>
+                  {joinUrl}
+                </a>
               </p>
+              
+              <div style={{ marginTop: '16px', fontSize: '1rem', color: '#aaa' }}>
+                Active Controllers: <strong style={{ color: '#fff' }}>{players.length === 0 ? "Waiting for players..." : players.map(p => `Player ${p}`).join(', ')}</strong>
+              </div>
             </div>
           )}
         </div>

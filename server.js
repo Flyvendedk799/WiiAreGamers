@@ -156,35 +156,61 @@ app.post('/api/press-ab', (req, res) => {
     res.json({ status: 'pressed' });
 });
 
+app.get('/api/status', (req, res) => {
+    res.json({
+        running: !!emulatorProcess,
+        partyCode: currentPartyCode,
+        players: activePlayers.length
+    });
+});
+
+app.post('/api/press-button', (req, res) => {
+    const { btn = 'A', slot = 0, duration = 300 } = req.body || {};
+    const state = controllerStates[slot];
+    if (state) {
+        state.buttons[btn] = true;
+        setTimeout(() => {
+            state.buttons[btn] = false;
+        }, duration);
+    }
+    res.json({ status: 'pressed', btn, slot });
+});
+
 function executeSwing(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
-    // 1. Windup
-    state.accel = { x: -1.5, y: -0.5, z: 0.5 };
-    state.gyro = { pitch: 100, yaw: -150, roll: 200 };
+    
+    // 1. Windup + trigger shake
+    state.buttons['R1'] = true;
+    state.accel = { x: -2.0, y: -0.5, z: 1.0 };
+    state.gyro = { pitch: 120, yaw: -180, roll: 250 };
     
     // 2. Powerful forward stroke
     setTimeout(() => {
-        state.accel = { x: 4.5, y: 0.8, z: 3.0 };
-        state.gyro = { pitch: -300, yaw: 450, roll: -500 };
-    }, 60);
+        state.buttons['R1'] = true;
+        state.accel = { x: 5.0, y: 1.0, z: 4.0 };
+        state.gyro = { pitch: -400, yaw: 600, roll: -600 };
+    }, 50);
 
-    // 3. Follow-through
+    // 3. Follow-through & release shake
     setTimeout(() => {
-        state.accel = { x: 1.0, y: -0.8, z: 0.5 };
+        state.buttons['R1'] = false;
+        state.accel = { x: 1.2, y: -0.8, z: 0.6 };
         state.gyro = { pitch: -50, yaw: 100, roll: -100 };
-    }, 180);
+    }, 160);
 
     // 4. Return to rest
     setTimeout(() => {
+        state.buttons['R1'] = false;
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
-    }, 320);
+    }, 300);
 }
 
 app.post('/api/swing', (req, res) => {
-    executeSwing(0);
-    res.json({ status: 'swung' });
+    const slot = req.body?.slot || 0;
+    executeSwing(slot);
+    res.json({ status: 'swung', slot });
 });
 
 const { DSUPacker } = require('./dsu-packer');
@@ -192,10 +218,10 @@ const dsu = new DSUPacker();
 
 // Store latest controller state per slot (0 to 3)
 const controllerStates = {
-    0: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
-    1: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
-    2: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } },
-    3: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 } }
+    0: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 }, stick: { x: 0, y: 0 } },
+    1: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 }, stick: { x: 0, y: 0 } },
+    2: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 }, stick: { x: 0, y: 0 } },
+    3: { buttons: {}, gyro: { pitch: 0, yaw: 0, roll: 0 }, accel: { x: 0, y: -1, z: 0 }, stick: { x: 0, y: 0 } }
 };
 
 let currentPartyCode = null;
@@ -309,6 +335,7 @@ io.on('connection', (socket) => {
         if (slot === -1) slot = 0; // Default to player 1
 
         const state = controllerStates[slot];
+        if (!state) return;
         if (data.type === 'motion') {
             if (data.accel) state.accel = data.accel;
             if (data.gyro) state.gyro = data.gyro;
@@ -320,6 +347,9 @@ io.on('connection', (socket) => {
                 state.buttons['A'] = !!data.state;
                 state.buttons['B'] = !!data.state;
             }
+        }
+        if (data.stick) {
+            state.stick = data.stick;
         }
 
         // Send immediate UDP packet to subscribers on input change

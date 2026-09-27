@@ -94,10 +94,12 @@ class DSUPacker {
         payload.writeUInt8(0, 23);  // Touch Button
 
         // Sticks (centered at 128 = 0x80)
-        payload.writeUInt8(0x80, 24); // LX
-        payload.writeUInt8(0x80, 25); // LY
-        payload.writeUInt8(0x80, 26); // RX
-        payload.writeUInt8(0x80, 27); // RY
+        const lx = data.stick?.x !== undefined ? Math.max(0, Math.min(255, Math.round(128 + data.stick.x * 127))) : 128;
+        const ly = data.stick?.y !== undefined ? Math.max(0, Math.min(255, Math.round(128 - data.stick.y * 127))) : 128;
+        payload.writeUInt8(lx, 24); // LX
+        payload.writeUInt8(ly, 25); // LY
+        payload.writeUInt8(128, 26); // RX
+        payload.writeUInt8(128, 27); // RY
 
         // Analog button values (0 or 255)
         payload.writeUInt8(data.buttons?.LEFT ? 0xFF : 0, 28);
