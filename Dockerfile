@@ -30,11 +30,11 @@ RUN cd frontend && npm install
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
-# Copy backend source
-COPY . .
-
 # Download Wii Sports as the default game for the emulator
 RUN curl -L -o /app/game.wbfs "https://archive.org/download/wii-sports-usa-rev-1/Wii%20Sports%20%28USA%29%20%28Rev%201%29.wbfs"
+
+# Copy backend source
+COPY . .
 
 # Ensure ROMs and Save directories exist
 RUN mkdir -p /root/.survhub/service-data/dolphin/roms
