@@ -161,7 +161,14 @@ function App() {
                 if (!isAudioEnabled) unlockAudio();
               }}
               title="Click to press A and enable sound"
-              style={{ width: '100%', height: 'auto', display: 'block', aspectRatio: '16/9', cursor: 'pointer' }}
+              style={{ 
+                width: '100%', 
+                height: 'auto', 
+                display: 'block', 
+                aspectRatio: '16/9', 
+                cursor: 'pointer',
+                imageRendering: 'crisp-edges'
+              }}
             ></canvas>
 
             {/* Quick Action Overlay Controls */}

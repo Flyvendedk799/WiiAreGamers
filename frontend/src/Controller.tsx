@@ -35,6 +35,8 @@ export default function Controller() {
     const [sensitivity, setSensitivity] = useState<'normal' | 'fast' | 'smooth'>('normal');
     const [showPwaTip, setShowPwaTip] = useState(false);
     const [recenteredToast, setRecenteredToast] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [stickDisplay, setStickDisplay] = useState({ x: 0, y: 0 });
     
     // Party system state
     const [partyCodeInput, setPartyCodeInput] = useState('');
@@ -49,6 +51,14 @@ export default function Controller() {
     const lastMotionEmit = useRef(0);
 
     // Gyro & Pointer State Refs
+    const baseYaw = useRef<number | null>(null);
+    const basePitch = useRef<number | null>(null);
+    const baseRoll = useRef<number | null>(null);
+    const currentYaw = useRef<number>(0);
+    const currentPitch = useRef<number>(55);
+    const currentRoll = useRef<number>(0);
+    const hasDeviceOrientation = useRef(false);
+
     const baseAx = useRef<number | null>(null);
     const baseAy = useRef<number | null>(null);
     const pointerX = useRef(0);
@@ -132,35 +142,44 @@ export default function Controller() {
         socket.emit('join-party', partyCodeInput.trim());
     };
 
+    const toggleFullscreen = () => {
+        try {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+            } else {
+                document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+            }
+        } catch (e) {}
+    };
+
     const requestGyroPermission = async () => {
         playHapticThump(80, 0.05);
         requestWakeLock();
 
-        // On iOS Safari, we must only request DeviceMotionEvent.
-        // It provides both rotationRate and gravity acceleration for laser aim and swing!
+        // Request BOTH permissions concurrently in the same user gesture on iOS
         try {
+            const promises: Promise<any>[] = [];
+            if (typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
+                promises.push((DeviceOrientationEvent as any).requestPermission());
+            }
             if (typeof (DeviceMotionEvent as any)?.requestPermission === 'function') {
-                const res = await (DeviceMotionEvent as any).requestPermission();
-                if (res !== 'granted') console.warn('DeviceMotion permission not granted');
+                promises.push((DeviceMotionEvent as any).requestPermission());
+            }
+            if (promises.length > 0) {
+                await Promise.all(promises);
             }
         } catch (err) {
-            console.error('DeviceMotion permission error', err);
+            console.warn('Sensor permission error', err);
         }
-
-        try {
-            if (typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
-                (DeviceOrientationEvent as any).requestPermission().catch(() => {});
-            }
-        } catch (e) {}
 
         enableSensors();
     };
 
     const triggerSwing = () => {
-        playHapticThump(50, 0.08);
-        try { if (navigator.vibrate) navigator.vibrate([40, 20, 40]); } catch (e) {}
+        playHapticThump(40, 0.12);
+        try { if (navigator.vibrate) navigator.vibrate([40, 20, 60]); } catch (e) {}
         setSwingEffect(true);
-        setTimeout(() => setSwingEffect(false), 280);
+        setTimeout(() => setSwingEffect(false), 300);
         socket.emit('swing');
         fetch('/api/swing', { 
             method: 'POST',
@@ -172,8 +191,12 @@ export default function Controller() {
     // Center laser aim to current wrist orientation
     const recenterPointer = () => {
         playHapticThump(120, 0.03);
-        try { if (navigator.vibrate) navigator.vibrate(20); } catch (e) {}
+        try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
         
+        baseYaw.current = currentYaw.current;
+        basePitch.current = currentPitch.current;
+        baseRoll.current = currentRoll.current;
+
         baseAx.current = latestAccel.current.x;
         baseAy.current = latestAccel.current.y;
         
@@ -181,6 +204,7 @@ export default function Controller() {
         pointerY.current = 0;
         smoothStickX.current = 0;
         smoothStickY.current = 0;
+        setStickDisplay({ x: 0, y: 0 });
 
         socket.emit('controller-input', {
             stick: { x: 0, y: 0 }
@@ -194,6 +218,58 @@ export default function Controller() {
         setGyroEnabled(true);
         lastMotionTime.current = Date.now();
 
+        // Engine 1: Absolute Hardware Attitude from DeviceOrientation (Zero Drift)
+        window.addEventListener('deviceorientation', (event) => {
+            let yaw = 0;
+            if ((event as any).webkitCompassHeading !== undefined && (event as any).webkitCompassHeading !== null) {
+                yaw = (event as any).webkitCompassHeading;
+            } else if (event.alpha !== null) {
+                yaw = (360 - event.alpha) % 360;
+            }
+
+            const pitch = event.beta ?? 55;
+            const roll = event.gamma ?? 0;
+
+            currentYaw.current = yaw;
+            currentPitch.current = pitch;
+            currentRoll.current = roll;
+
+            if (baseYaw.current === null) {
+                baseYaw.current = yaw;
+                basePitch.current = pitch;
+                baseRoll.current = roll;
+            }
+
+            hasDeviceOrientation.current = true;
+
+            if (isTouchingTrackpad.current || !gyroAimActive) return;
+            const now = Date.now();
+            if (now - lastSwingTime.current < 380) return; // mid-swing freeze
+
+            let reachX = 16.0;
+            let reachY = 12.0;
+            if (sensitivity === 'fast') {
+                reachX = 10.0;
+                reachY = 8.0;
+            } else if (sensitivity === 'smooth') {
+                reachX = 22.0;
+                reachY = 17.0;
+            }
+
+            const diffYaw = ((yaw - (baseYaw.current ?? yaw) + 540) % 360) - 180;
+            const diffPitch = pitch - (basePitch.current ?? pitch);
+            const diffRoll = roll - (baseRoll.current ?? roll);
+
+            // Ergonomic natural wrist roll compensation
+            const targetX = Math.max(-1.0, Math.min(1.0, (diffYaw + diffRoll * 0.18) / reachX));
+            const targetY = Math.max(-1.0, Math.min(1.0, diffPitch / reachY));
+
+            // Smooth with low-pass filter
+            smoothStickX.current = smoothStickX.current * 0.70 + targetX * 0.30;
+            smoothStickY.current = smoothStickY.current * 0.70 + targetY * 0.30;
+        });
+
+        // Engine 2: High-Frequency DeviceMotion for Tennis Swings & Gyro Integration Fallback
         window.addEventListener('devicemotion', (event) => {
             const acc = event.accelerationIncludingGravity || event.acceleration;
             const rot = event.rotationRate;
@@ -213,26 +289,24 @@ export default function Controller() {
 
             const now = Date.now();
 
-            // Auto-calibrate center on first reading
             if (baseAy.current === null) {
                 baseAx.current = ax;
                 baseAy.current = ay;
             }
 
-            // 1. Physical Tennis Swing Detection
+            // 1. Tennis Physical Swing Detection
             const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
             const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
 
-            if ((totalAccel > 2.0 || rotMagnitude > 240) && (now - lastSwingTime.current > 350)) {
+            if ((totalAccel > 2.2 || rotMagnitude > 260) && (now - lastSwingTime.current > 380)) {
                 lastSwingTime.current = now;
                 triggerSwing();
             }
 
-            // 2. High-Precision Laser Pointer Fusion (Powered by devicemotion)
-            // If manual touch trackpad is touched, or laser aim is disabled, or mid-swing: pause gyro pointer
-            const isMidSwing = (now - lastSwingTime.current < 350);
+            // 2. High-Frequency Fallback Pointer Fusion (if DeviceOrientation is not firing)
+            const isMidSwing = (now - lastSwingTime.current < 380);
 
-            if (!isTouchingTrackpad.current && gyroAimActive && !isMidSwing) {
+            if (!hasDeviceOrientation.current && !isTouchingTrackpad.current && gyroAimActive && !isMidSwing) {
                 const dt = Math.min(0.05, Math.max(0.005, (now - lastMotionTime.current) / 1000));
                 lastMotionTime.current = now;
 
@@ -240,27 +314,21 @@ export default function Controller() {
                 if (sensitivity === 'fast') sensMultiplier = 1.4;
                 if (sensitivity === 'smooth') sensMultiplier = 0.75;
 
-                // In portrait mode:
-                // rot.gamma: turning wrist left/right (aiming across the screen)
-                // rot.beta: tilting phone up/down (aiming vertical)
-                const gyroDeltaX = (rot?.gamma || 0) * dt * 0.035 * sensMultiplier;
-                const gyroDeltaY = -(rot?.beta || 0) * dt * 0.035 * sensMultiplier;
+                const gyroDeltaX = (rot?.gamma || 0) * dt * 0.045 * sensMultiplier;
+                const gyroDeltaY = -(rot?.beta || 0) * dt * 0.045 * sensMultiplier;
 
-                // Absolute tilt anchor from gravity vector (prevents drift!)
-                const tiltAnchorX = (ax - (baseAx.current ?? 0)) * 2.0 * sensMultiplier;
-                const tiltAnchorY = -((ay - (baseAy.current ?? -0.7)) * 2.0 * sensMultiplier);
+                const tiltAnchorX = (ax - (baseAx.current ?? 0)) * 2.2 * sensMultiplier;
+                const tiltAnchorY = -((ay - (baseAy.current ?? -0.7)) * 2.2 * sensMultiplier);
 
-                // Complementary filter: 90% gyro integration + 10% gravity anchor
-                pointerX.current = pointerX.current * 0.90 + gyroDeltaX + tiltAnchorX * 0.10;
-                pointerY.current = pointerY.current * 0.90 + gyroDeltaY + tiltAnchorY * 0.10;
+                // Proper complementary integration: integrated gyro rate + gravity vector anchor
+                pointerX.current = (pointerX.current + gyroDeltaX) * 0.95 + tiltAnchorX * 0.05;
+                pointerY.current = (pointerY.current + gyroDeltaY) * 0.95 + tiltAnchorY * 0.05;
 
-                // Clamp to screen range [-1.0, 1.0]
                 pointerX.current = Math.max(-1.0, Math.min(1.0, pointerX.current));
                 pointerY.current = Math.max(-1.0, Math.min(1.0, pointerY.current));
 
-                // Smooth with exponential filter
-                smoothStickX.current = smoothStickX.current * 0.65 + pointerX.current * 0.35;
-                smoothStickY.current = smoothStickY.current * 0.65 + pointerY.current * 0.35;
+                smoothStickX.current = smoothStickX.current * 0.70 + pointerX.current * 0.30;
+                smoothStickY.current = smoothStickY.current * 0.70 + pointerY.current * 0.30;
             } else {
                 lastMotionTime.current = now;
             }
@@ -274,6 +342,7 @@ export default function Controller() {
                     accel: latestAccel.current,
                     gyro: latestGyro.current
                 });
+                setStickDisplay({ x: smoothStickX.current, y: smoothStickY.current });
             }
         });
     };
@@ -369,8 +438,13 @@ export default function Controller() {
                 <div className="player-badge" style={{ backgroundColor: pColor }}>
                     Player {joinedSlot}
                 </div>
-                <div className="conn-status">
-                    {connected ? '🟢 Connected' : '🔴 Offline'}
+                <div className="top-bar-right">
+                    <button className="btn-fullscreen-toggle" onClick={toggleFullscreen}>
+                        {isFullscreen ? '✕ Exit' : '⛶ Fullscreen'}
+                    </button>
+                    <div className="conn-status">
+                        {connected ? '🟢' : '🔴'}
+                    </div>
                 </div>
             </div>
 
@@ -428,7 +502,7 @@ export default function Controller() {
                 🎾 SWING / HIT
             </button>
 
-            {/* Aim Trackpad for Menu Navigation */}
+            {/* Interactive Aim Trackpad with Real-Time Aim Reticle */}
             <div 
                 ref={trackpadRef}
                 className="aim-trackpad"
@@ -439,11 +513,19 @@ export default function Controller() {
                 onMouseMove={(e) => { if (isTouchingTrackpad.current) handleTrackpadTouch(e); }}
                 onMouseUp={releaseTrackpad}
             >
-                <div className="aim-crosshair">🎯</div>
+                <div 
+                    className="aim-reticle"
+                    style={{
+                        transform: `translate(${stickDisplay.x * 70}px, ${-stickDisplay.y * 30}px)`
+                    }}
+                >
+                    <div className="reticle-dot"></div>
+                    <div className="reticle-ring"></div>
+                </div>
                 <div className="aim-label">
                     {gyroEnabled && gyroAimActive 
-                        ? "Point phone at TV, or drag thumb here to aim" 
-                        : "Drag thumb here to aim pointer"}
+                        ? "Point phone at TV, or touch here to drag cursor" 
+                        : "Touch here to drag pointer"}
                 </div>
             </div>
 

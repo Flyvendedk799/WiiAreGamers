@@ -168,6 +168,29 @@ body, html {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.btn-fullscreen-toggle {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #ddd;
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-fullscreen-toggle:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.95);
+}
+
 .conn-status {
     font-size: 0.9rem;
     font-weight: 500;
@@ -314,16 +337,47 @@ body, html {
     border-color: #0088ff;
 }
 
-.aim-crosshair {
-    font-size: 1.6rem;
+.aim-reticle {
+    position: absolute;
+    width: 28px;
+    height: 28px;
     pointer-events: none;
+    transition: transform 0.04s linear;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+}
+
+.reticle-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #00d2ff;
+    box-shadow: 0 0 10px #00d2ff, 0 0 20px #0088ff;
+}
+
+.reticle-ring {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 210, 255, 0.6);
+    animation: reticlePulse 2s infinite ease-in-out;
+}
+
+@keyframes reticlePulse {
+    0% { transform: scale(0.9); opacity: 0.5; }
+    50% { transform: scale(1.15); opacity: 0.9; }
+    100% { transform: scale(0.9); opacity: 0.5; }
 }
 
 .aim-label {
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: #888;
     pointer-events: none;
-    margin-top: 4px;
+    position: absolute;
+    bottom: 8px;
 }
 
 /* Primary Action Buttons */
