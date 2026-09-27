@@ -37,7 +37,8 @@ RUN mkdir -p /root/.survhub/service-data/dolphin/roms
 RUN mkdir -p /root/.survhub/service-data/dolphin/saves
 RUN mkdir -p /root/.config/dolphin-emu
 
-# Copy Dolphin config
+# Create Dolphin config and disable audio to fix ALSA/PulseAudio Docker crashes
+RUN echo "[Core]\nAudioBackend = Null\n" > /root/.config/dolphin-emu/Dolphin.ini
 COPY WiimoteNew.ini /root/.config/dolphin-emu/WiimoteNew.ini
 
 EXPOSE 8080

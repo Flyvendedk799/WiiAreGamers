@@ -46,13 +46,19 @@ app.post('/api/start', (req, res) => {
     const dolphinPath = '/usr/games/dolphin-emu-nogui';
     
     // Spawn Dolphin in Xvfb (Virtual Framebuffer for headless mode)
-    // Display :99 is commonly used.
+    // Display :99 is commonly used. Disable MIT-SHM to avoid Docker 64MB /dev/shm limits causing Bus Errors.
     emulatorProcess = spawn('xvfb-run', [
         '-n', '99',
-        '-s', '-screen 0 1280x720x24',
+        '-s', '-screen 0 1280x720x24 -extension MIT-SHM',
         dolphinPath,
         '-e', romPath
-    ]);
+    ], {
+        env: {
+            ...process.env,
+            QT_X11_NO_MITSHM: '1',
+            XDG_RUNTIME_DIR: '/tmp'
+        }
+    });
 
     emulatorProcess.stdout.on('data', (data) => console.log('Dolphin stdout:', data.toString()));
     emulatorProcess.stderr.on('data', (data) => console.error('Dolphin stderr:', data.toString()));
