@@ -53,11 +53,12 @@ app.post('/api/start', (req, res) => {
     try {
         if (fs.existsSync('/tmp/.X99-lock')) fs.unlinkSync('/tmp/.X99-lock');
         if (fs.existsSync('/tmp/.X11-unix/X99')) fs.unlinkSync('/tmp/.X11-unix/X99');
+        if (fs.existsSync('/var/run/pulse/pid')) fs.unlinkSync('/var/run/pulse/pid');
     } catch (e) {}
 
     // Initialize PulseAudio daemon for in-game sound
     try {
-        require('child_process').execSync('pulseaudio --system --disallow-exit --no-cpu-limit -D || true');
+        require('child_process').execSync('rm -f /var/run/pulse/pid; pulseaudio --system --disallow-exit --no-cpu-limit -D || true');
     } catch (e) {}
 
     // Spawn Xvfb manually with access control disabled (-ac)
