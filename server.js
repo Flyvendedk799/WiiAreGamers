@@ -203,13 +203,13 @@ io.on('connection', (socket) => {
             } else if (data.type === 'button') {
                 state.buttons[data.btn] = data.state;
                 if (data.btn === 'A' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 xpress.py Return --hold 0.1', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py a --hold 0.1', (err) => {});
                 }
                 if (data.btn === 'B' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 xpress.py space --hold 0.1', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py b --hold 0.1', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 xpress.py Return space --hold 0.5', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 python3 xpress.py a b --hold 0.5', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
