@@ -28,8 +28,8 @@ app.post('/api/start', (req, res) => {
         return res.json({ status: 'already_running' });
     }
 
-    // On ServerHoster, ROMs will be stored in the persistent volume
-    const romPath = process.env.ROM_PATH || '/root/.survhub/service-data/dolphin/roms/game.iso';
+    // Use the bundled Homebrew ROM to guarantee an immediate playable state
+    const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.dol');
     
     // Spawn Dolphin in Xvfb (Virtual Framebuffer for headless mode)
     // Display :99 is commonly used.

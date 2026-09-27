@@ -29,6 +29,9 @@ RUN cd frontend && npm run build
 # Copy backend source
 COPY . .
 
+# Download a tiny Homebrew game as a placeholder so Dolphin has something to boot immediately
+RUN curl -L -o /app/game.dol https://github.com/devkitPro/wii-examples/raw/master/graphics/gx/nehe/lesson1/lesson1.dol
+
 # Ensure ROMs and Save directories exist
 RUN mkdir -p /root/.survhub/service-data/dolphin/roms
 RUN mkdir -p /root/.survhub/service-data/dolphin/saves
