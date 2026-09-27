@@ -11,7 +11,8 @@ function App() {
   useEffect(() => {
     // We only mount the video player when playing
     if (isPlaying && canvasRef.current && !playerRef.current) {
-      const videoUrl = `ws://${window.location.host}/video-stream`;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const videoUrl = `${wsProtocol}//${window.location.host}/video-stream`;
       
       // JSMPEG decodes MPEG1 video stream directly in WebGL/Canvas
       playerRef.current = new JSMpeg.VideoElement(
@@ -68,7 +69,7 @@ function App() {
             <p>Select a game to begin streaming.</p>
             {/* Game library UI goes here */}
             <div className="game-card">
-              <h3>Mario Kart Wii (Demo)</h3>
+              <h3>Wii Sports</h3>
             </div>
           </div>
         )}

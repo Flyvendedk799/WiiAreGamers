@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import './Controller.css';
 
-const socket = io(window.location.origin);
+const socket = io(window.location.origin, { transports: ['websocket'] });
 
 export default function Controller() {
     const [connected, setConnected] = useState(false);
