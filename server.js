@@ -46,6 +46,15 @@ app.post('/api/start', (req, res) => {
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
     const dolphinPath = '/usr/games/dolphin-emu-nogui';
     
+    // Clean up any stale X11 lock files or zombie processes
+    try {
+        require('child_process').execSync('pkill -9 Xvfb; pkill -9 fluxbox; pkill -9 ffmpeg; pkill -9 dolphin || true');
+    } catch (e) {}
+    try {
+        if (fs.existsSync('/tmp/.X99-lock')) fs.unlinkSync('/tmp/.X99-lock');
+        if (fs.existsSync('/tmp/.X11-unix/X99')) fs.unlinkSync('/tmp/.X11-unix/X99');
+    } catch (e) {}
+
     // Spawn Xvfb manually with access control disabled (-ac)
     const xvfbProcess = spawn('Xvfb', [
         ':99',
@@ -213,6 +222,16 @@ app.all('/api/swing', (req, res) => {
     const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     executeSwing(slot);
     res.json({ status: 'swung', slot });
+});
+
+app.all('/api/aim', (req, res) => {
+    const x = parseFloat(req.query.x ?? req.body?.x ?? 0);
+    const y = parseFloat(req.query.y ?? req.body?.y ?? 0);
+    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
+    if (controllerStates[slot]) {
+        controllerStates[slot].stick = { x, y };
+    }
+    res.json({ status: 'aimed', x, y, slot });
 });
 
 const { DSUPacker } = require('./dsu-packer');
