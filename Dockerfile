@@ -46,6 +46,11 @@ RUN echo "[Settings]\nAspectRatio = 1\nFullscreen = True\n" > /root/.config/dolp
 RUN echo "[Server]\nEnabled = True\nEntries = DSU:127.0.0.1:26760;\n" > /root/.config/dolphin-emu/DSUClient.ini && cp /root/.config/dolphin-emu/DSUClient.ini /root/.config/dolphin-emu/DualShockUDPClient.ini
 COPY WiimoteNew.ini /root/.config/dolphin-emu/WiimoteNew.ini
 
+# Configure Fluxbox to hide taskbar and remove window borders for clean fullscreen streaming
+RUN mkdir -p /root/.fluxbox && \
+    echo "session.screen0.toolbar.visible: false" > /root/.fluxbox/init && \
+    echo "[app] (name=.*)\n  [Deco] {NONE}\n  [Maximized] {yes}\n[end]" > /root/.fluxbox/apps
+
 EXPOSE 8080
 # Expose DSU UDP Port for iOS App
 EXPOSE 26760/udp

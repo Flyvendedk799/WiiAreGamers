@@ -70,6 +70,16 @@ function App() {
     socket.emit('create-party');
   };
 
+  const toggleFullscreen = () => {
+    const el = document.getElementById('video-wrapper');
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
+
   return (
     <div className="App">
       <header>
@@ -85,9 +95,66 @@ function App() {
 
       <main>
         {isPlaying ? (
-          <div id="video-wrapper" className="video-container" style={{ position: 'relative' }}>
-            <canvas ref={canvasRef} id="video-canvas"></canvas>
-            <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(0,0,0,0.7)', color: '#0f0', padding: '10px', fontFamily: 'monospace', textAlign: 'left', zIndex: 100, borderRadius: '5px', pointerEvents: 'none' }}>
+          <div 
+            id="video-wrapper" 
+            className="video-container" 
+            style={{ 
+              position: 'relative', 
+              width: '100%', 
+              maxWidth: '960px', 
+              margin: '0 auto', 
+              background: '#000', 
+              borderRadius: '8px', 
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.6)'
+            }}
+          >
+            <canvas 
+              ref={canvasRef} 
+              id="video-canvas"
+              style={{ width: '100%', height: 'auto', display: 'block', aspectRatio: '16/9' }}
+            ></canvas>
+
+            <button 
+              onClick={() => fetch('/api/press-ab', { method: 'POST' }).catch(() => {})}
+              style={{
+                position: 'absolute',
+                bottom: 12,
+                left: 12,
+                background: '#ffaa00',
+                color: '#000',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                zIndex: 10,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+              }}
+            >
+              Press A+B (Menu)
+            </button>
+
+            <button 
+              onClick={toggleFullscreen}
+              style={{
+                position: 'absolute',
+                bottom: 12,
+                right: 12,
+                background: 'rgba(0,0,0,0.7)',
+                color: '#fff',
+                border: '1px solid #666',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                zIndex: 10
+              }}
+            >
+              ⛶ Fullscreen
+            </button>
+
+            <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(0,0,0,0.7)', color: '#0f0', padding: '10px', fontFamily: 'monospace', textAlign: 'left', zIndex: 100, borderRadius: '5px', pointerEvents: 'none', fontSize: '0.85rem' }}>
               <h4>Debug Inputs:</h4>
               {debugLog.length === 0 ? <p>No inputs received yet...</p> : null}
               {debugLog.map((log, i) => <div key={i}>{log}</div>)}

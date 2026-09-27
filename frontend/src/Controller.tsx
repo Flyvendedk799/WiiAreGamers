@@ -69,6 +69,9 @@ export default function Controller() {
 
     const handleButton = (btn: string, state: boolean) => {
         socket.emit('controller-input', { type: 'button', btn, state });
+        if (btn === 'AB' && state) {
+            fetch('/api/press-ab', { method: 'POST' }).catch(() => {});
+        }
     };
 
     if (!joinedSlot) {

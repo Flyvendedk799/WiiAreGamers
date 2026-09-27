@@ -56,6 +56,11 @@ app.post('/api/start', (req, res) => {
 
     // Give Xvfb a moment to boot
     setTimeout(() => {
+        try {
+            if (!fs.existsSync('/root/.fluxbox')) fs.mkdirSync('/root/.fluxbox', { recursive: true });
+            fs.writeFileSync('/root/.fluxbox/init', 'session.screen0.toolbar.visible: false\n');
+            fs.writeFileSync('/root/.fluxbox/apps', '[app] (name=.*)\n  [Deco] {NONE}\n  [Maximized] {yes}\n[end]\n');
+        } catch (e) {}
         const wmProcess = require('child_process').spawn('fluxbox', ['-display', ':99']);
 
         // Start a lightweight window manager so Fullscreen requests actually work
@@ -87,7 +92,7 @@ app.post('/api/start', (req, res) => {
         // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
-            '-video_size', '640x480',
+            '-video_size', '854x480',
             '-r', '30',
             '-i', ':99',
             '-f', 'mpegts',
@@ -126,6 +131,29 @@ app.post('/api/stop', (req, res) => {
     }
     require('child_process').exec('pkill Xvfb');
     res.json({ status: 'stopped' });
+});
+
+app.get('/api/debug-dsu', (req, res) => {
+    res.json({
+        subscribers: Array.from(dolphinSubscribers.entries()),
+        states: controllerStates
+    });
+});
+
+app.post('/api/press-ab', (req, res) => {
+    const slot = 0;
+    const state = controllerStates[slot];
+    state.buttons['A'] = true;
+    state.buttons['B'] = true;
+    io.emit('debug-input', { slot, btn: 'AB', state: true });
+    
+    setTimeout(() => {
+        state.buttons['A'] = false;
+        state.buttons['B'] = false;
+        io.emit('debug-input', { slot, btn: 'AB', state: false });
+    }, 1200);
+
+    res.json({ status: 'pressed' });
 });
 
 const { DSUPacker } = require('./dsu-packer');
