@@ -96,7 +96,8 @@ app.post('/api/start', (req, res) => {
             env: {
                 ...process.env,
                 DISPLAY: ':99',
-                XDG_RUNTIME_DIR: '/tmp'
+                XDG_RUNTIME_DIR: '/tmp',
+                LP_NUM_THREADS: '5'
             }
         });
 
@@ -110,12 +111,12 @@ app.post('/api/start', (req, res) => {
             xvfbProcess.kill();
         });
 
-        // Start FFmpeg to capture both video and stereo audio with synchronized zero-latency streaming
+        // Start FFmpeg to capture both video and stereo audio with synchronized zero-latency streaming at full 60 FPS
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
             '-thread_queue_size', '512',
             '-video_size', '854x480',
-            '-r', '30',
+            '-framerate', '60',
             '-i', ':99',
             '-f', 'pulse',
             '-thread_queue_size', '512',
@@ -123,9 +124,9 @@ app.post('/api/start', (req, res) => {
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
             '-s', '854x480',
-            '-b:v', '2500k',
-            '-maxrate', '3000k',
-            '-bufsize', '800k',
+            '-b:v', '2800k',
+            '-maxrate', '3500k',
+            '-bufsize', '1000k',
             '-bf', '0',
             '-g', '30',
             '-qmin', '2',
@@ -211,6 +212,17 @@ app.all('/api/press-button', (req, res) => {
         }, duration);
     }
     res.json({ status: 'pressed', btn, slot });
+});
+
+app.all('/api/set-stick', (req, res) => {
+    const x = parseFloat(req.query.x ?? req.body?.x ?? 0);
+    const y = parseFloat(req.query.y ?? req.body?.y ?? 0);
+    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
+    const state = controllerStates[slot];
+    if (state) {
+        state.stick = { x, y };
+    }
+    res.json({ status: 'ok', stick: { x, y }, slot });
 });
 
 function executeSwing(slot = 0) {

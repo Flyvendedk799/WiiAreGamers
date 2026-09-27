@@ -48,7 +48,6 @@ export default function Controller() {
     const trackpadRef = useRef<HTMLDivElement>(null);
     const isTouchingTrackpad = useRef(false);
     const lastSwingTime = useRef(0);
-    const lastMotionEmit = useRef(0);
 
     // Gyro & Pointer State Refs
     const baseYaw = useRef<number | null>(null);
@@ -264,9 +263,9 @@ export default function Controller() {
             const targetX = Math.max(-1.0, Math.min(1.0, (diffYaw + diffRoll * 0.18) / reachX));
             const targetY = Math.max(-1.0, Math.min(1.0, diffPitch / reachY));
 
-            // Smooth with low-pass filter
-            smoothStickX.current = smoothStickX.current * 0.70 + targetX * 0.30;
-            smoothStickY.current = smoothStickY.current * 0.70 + targetY * 0.30;
+            // Smooth with low-pass filter (snappier, ultra-low latency response)
+            smoothStickX.current = smoothStickX.current * 0.40 + targetX * 0.60;
+            smoothStickY.current = smoothStickY.current * 0.40 + targetY * 0.60;
         });
 
         // Engine 2: High-Frequency DeviceMotion for Tennis Swings & Gyro Integration Fallback
@@ -295,10 +294,11 @@ export default function Controller() {
             }
 
             // 1. Tennis Physical Swing Detection
+            // A real swing is a strong physical stroke with linear acceleration (> 2.8 Gs), NOT just wrist rotation
             const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
             const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
 
-            if ((totalAccel > 2.2 || rotMagnitude > 260) && (now - lastSwingTime.current > 380)) {
+            if ((totalAccel > 2.8 || (totalAccel > 2.2 && rotMagnitude > 400)) && (now - lastSwingTime.current > 450)) {
                 lastSwingTime.current = now;
                 triggerSwing();
             }
@@ -327,25 +327,31 @@ export default function Controller() {
                 pointerX.current = Math.max(-1.0, Math.min(1.0, pointerX.current));
                 pointerY.current = Math.max(-1.0, Math.min(1.0, pointerY.current));
 
-                smoothStickX.current = smoothStickX.current * 0.70 + pointerX.current * 0.30;
-                smoothStickY.current = smoothStickY.current * 0.70 + pointerY.current * 0.30;
+                smoothStickX.current = smoothStickX.current * 0.50 + pointerX.current * 0.50;
+                smoothStickY.current = smoothStickY.current * 0.50 + pointerY.current * 0.50;
             } else {
                 lastMotionTime.current = now;
             }
-
-            // 3. Continuous DSU input stream at 30Hz (~33ms) matching video stream
-            if (now - lastMotionEmit.current > 30) {
-                lastMotionEmit.current = now;
-                socket.emit('controller-input', {
-                    type: 'motion',
-                    stick: { x: smoothStickX.current, y: smoothStickY.current },
-                    accel: latestAccel.current,
-                    gyro: latestGyro.current
-                });
-                setStickDisplay({ x: smoothStickX.current, y: smoothStickY.current });
-            }
         });
     };
+
+    // Continuous 60Hz ultra-low latency input stream to Dolphin
+    useEffect(() => {
+        if (!gyroEnabled || !connected) return;
+        const interval = setInterval(() => {
+            const now = Date.now();
+            if (now - lastSwingTime.current < 380) return; // mid-swing freeze
+            
+            socket.emit('controller-input', {
+                type: 'motion',
+                stick: { x: smoothStickX.current, y: smoothStickY.current },
+                accel: latestAccel.current,
+                gyro: latestGyro.current
+            });
+            setStickDisplay({ x: smoothStickX.current, y: smoothStickY.current });
+        }, 16);
+        return () => clearInterval(interval);
+    }, [gyroEnabled, connected]);
 
     const handleButton = (btn: string, state: boolean) => {
         if (state) {

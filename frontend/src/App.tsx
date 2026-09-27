@@ -70,14 +70,24 @@ function App() {
 
   const unlockAudio = () => {
     try {
-      if (playerRef.current?.player?.audioOut) {
-        playerRef.current.player.audioOut.unlock?.();
-        if (playerRef.current.player.audioOut.context?.state === 'suspended') {
-          playerRef.current.player.audioOut.context.resume();
+      if (playerRef.current) {
+        if (playerRef.current.player?.audioOut) {
+          playerRef.current.player.audioOut.unlock?.();
+          if (playerRef.current.player.audioOut.context?.state === 'suspended') {
+            playerRef.current.player.audioOut.context.resume();
+          }
+        }
+        if (playerRef.current.onUnlockAudio && playerRef.current.els?.wrapper) {
+          playerRef.current.onUnlockAudio(playerRef.current.els.wrapper, { preventDefault: () => {}, stopPropagation: () => {} });
+        }
+        if (playerRef.current.player) {
+          playerRef.current.player.volume = 1;
         }
       }
       setIsAudioEnabled(true);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Audio unlock error:', e);
+    }
   };
 
   const startGame = async () => {
@@ -170,6 +180,37 @@ function App() {
                 imageRendering: 'crisp-edges'
               }}
             ></canvas>
+
+            {/* Unmute Game Audio Banner Overlay */}
+            {!isAudioEnabled && (
+              <div 
+                onClick={unlockAudio}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(0, 0, 0, 0.82)',
+                  backdropFilter: 'blur(8px)',
+                  padding: '16px 26px',
+                  borderRadius: '14px',
+                  border: '2px solid #10b981',
+                  color: '#fff',
+                  fontSize: '17px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  zIndex: 20,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                  userSelect: 'none'
+                }}
+              >
+                <span style={{ fontSize: '24px' }}>🔊</span>
+                <span>Click / Tap anywhere to Enable Game Sound</span>
+              </div>
+            )}
 
             {/* Quick Action Overlay Controls */}
             <div style={{
