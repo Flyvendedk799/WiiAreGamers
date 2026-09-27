@@ -1,13 +1,14 @@
-FROM ubuntu:24.04
+FROM debian:12
 
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install dependencies: Node.js, Dolphin, Xvfb, FFmpeg
-RUN apt-get update && apt-get install -y software-properties-common \
-    && add-apt-repository universe \
-    && apt-get update \
-    && apt-get install -y curl xvfb ffmpeg dolphin-emu \
+RUN apt-get update && apt-get install -y \
+    curl \
+    xvfb \
+    ffmpeg \
+    dolphin-emu \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
