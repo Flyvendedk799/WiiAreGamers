@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     ffmpeg \
     xdotool \
+    fluxbox \
     dolphin-emu \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
@@ -39,7 +40,8 @@ RUN mkdir -p /root/.survhub/service-data/dolphin/saves
 RUN mkdir -p /root/.config/dolphin-emu
 
 # Create Dolphin config and disable audio to fix ALSA/PulseAudio Docker crashes
-RUN echo "[Core]\nAudioBackend = Null\nEnableAlternateInputSources = True\n" > /root/.config/dolphin-emu/Dolphin.ini
+RUN echo "[Core]\nAudioBackend = Null\nEnableAlternateInputSources = True\n[Wii]\nWidescreen = True\n" > /root/.config/dolphin-emu/Dolphin.ini
+RUN echo "[Settings]\nAspectRatio = 1\nFullscreen = True\n" > /root/.config/dolphin-emu/GFX.ini
 RUN echo "[Server]\nEnabled = True\nEntries = DSU:127.0.0.1:26760;\n" > /root/.config/dolphin-emu/DualShockUDPClient.ini
 COPY WiimoteNew.ini /root/.config/dolphin-emu/WiimoteNew.ini
 

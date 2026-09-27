@@ -55,6 +55,9 @@ app.post('/api/start', (req, res) => {
 
     // Give Xvfb a moment to boot
     setTimeout(() => {
+        // Start a lightweight window manager so Fullscreen requests actually work
+        const wmProcess = spawn('fluxbox', [], { env: { ...process.env, DISPLAY: ':99' } });
+
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
             '-p', 'x11',
@@ -75,6 +78,7 @@ app.post('/api/start', (req, res) => {
             emulatorProcess = null;
             if (streamProcess) streamProcess.kill();
             xvfbProcess.kill();
+            try { wmProcess.kill(); } catch(e) {}
         });
 
         // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
@@ -117,6 +121,7 @@ app.post('/api/stop', (req, res) => {
         streamProcess.kill();
         streamProcess = null;
     }
+    require('child_process').exec('pkill Xvfb; pkill fluxbox');
     res.json({ status: 'stopped' });
 });
 
