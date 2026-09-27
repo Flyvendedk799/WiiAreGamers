@@ -10,8 +10,20 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Raw WebSocket Server for JSMPEG Video Streaming
-const wss = new WebSocket.Server({ server, path: '/video-stream' });
+// Raw WebSocket Server for JSMPEG Video Streaming (noServer so we can manually route upgrades)
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+    
+    if (pathname === '/video-stream') {
+        wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+        });
+    }
+    // Socket.io automatically intercepts its own path (/socket.io/)
+    // so we just leave it alone.
+});
 
 app.use(express.static(path.join(__dirname, 'frontend/dist')));
 app.use(express.json());
@@ -41,8 +53,11 @@ app.post('/api/start', (req, res) => {
         '-e', romPath
     ]);
 
-    emulatorProcess.on('close', () => {
-        console.log('Emulator stopped');
+    emulatorProcess.stdout.on('data', (data) => console.log('Dolphin stdout:', data.toString()));
+    emulatorProcess.stderr.on('data', (data) => console.error('Dolphin stderr:', data.toString()));
+
+    emulatorProcess.on('close', (code) => {
+        console.log(`Emulator stopped with code ${code}`);
         emulatorProcess = null;
         if (streamProcess) streamProcess.kill();
     });
