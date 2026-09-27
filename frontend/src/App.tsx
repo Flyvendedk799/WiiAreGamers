@@ -1,10 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import io from 'socket.io-client'
+// @ts-ignore
 import JSMpeg from '@cycjimmy/jsmpeg-player'
 import './App.css'
-
-// Socket.io for Controller Inputs
-const socket = io(window.location.origin);
 
 function App() {
   const [isPlaying, setIsPlaying] = useState(false);
