@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     xvfb \
     ffmpeg \
+    xdotool \
     dolphin-emu \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
