@@ -43,7 +43,7 @@ app.post('/api/start', (req, res) => {
     // Use the bundled Wii Sports ROM to guarantee an immediate playable state
     const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.wbfs');
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
-    const dolphinPath = '/usr/games/dolphin-emu-nogui';
+    const dolphinPath = '/usr/games/dolphin-emu';
     
     // Spawn Xvfb manually with access control disabled (-ac)
     const xvfbProcess = spawn('Xvfb', [
@@ -61,9 +61,7 @@ app.post('/api/start', (req, res) => {
 
 
         emulatorProcess = spawn(dolphinPath, [
-            '-e', romPath,
-            '-p', 'x11',
-            '-C', 'Display.Fullscreen=True'
+            '-b', '-e', romPath
         ], {
             env: {
                 ...process.env,
