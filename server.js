@@ -45,12 +45,11 @@ app.post('/api/start', (req, res) => {
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
     const dolphinPath = '/usr/games/dolphin-emu-nogui';
     
-    // Spawn Xvfb manually with access control disabled (-ac) so ffmpeg can connect without Xauthority
+    // Spawn Xvfb manually with access control disabled (-ac)
     const xvfbProcess = spawn('Xvfb', [
         ':99',
         '-screen', '0',
         '1280x720x24',
-        '-extension', 'MIT-SHM',
         '-ac'
     ]);
 
@@ -60,7 +59,6 @@ app.post('/api/start', (req, res) => {
             env: {
                 ...process.env,
                 DISPLAY: ':99',
-                QT_X11_NO_MITSHM: '1',
                 XDG_RUNTIME_DIR: '/tmp'
             }
         });
