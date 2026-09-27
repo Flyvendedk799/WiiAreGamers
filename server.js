@@ -57,7 +57,7 @@ app.post('/api/start', (req, res) => {
 
     // Initialize PulseAudio daemon for in-game sound
     try {
-        require('child_process').execSync('pulseaudio --start --exit-idle-time=-1 || true');
+        require('child_process').execSync('pulseaudio --system --disallow-exit --no-cpu-limit -D || true');
     } catch (e) {}
 
     // Spawn Xvfb manually with access control disabled (-ac)
@@ -84,7 +84,9 @@ app.post('/api/start', (req, res) => {
             '-C', 'Core.CPUThread=True',
             '-C', 'Core.Fastmem=True',
             '-C', 'Core.DSPHLE=True',
-            '-C', 'Core.AudioBackend=Pulse',
+            '-C', 'DSP.DSPHLE=True',
+            '-C', 'DSP.DSPThread=True',
+            '-C', 'DSP.Backend=Pulse',
             '-C', 'Core.SyncGPU=False',
             '-C', 'Core.SyncOnSkipIdle=True',
             '-C', 'Wii.Widescreen=True',
