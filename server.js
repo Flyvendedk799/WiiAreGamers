@@ -164,8 +164,10 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-app.post('/api/press-button', (req, res) => {
-    const { btn = 'A', slot = 0, duration = 300 } = req.body || {};
+app.all('/api/press-button', (req, res) => {
+    const btn = req.query.btn || req.body?.btn || 'A';
+    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
+    const duration = parseInt(req.query.duration ?? req.body?.duration ?? 300);
     const state = controllerStates[slot];
     if (state) {
         state.buttons[btn] = true;
@@ -207,8 +209,8 @@ function executeSwing(slot = 0) {
     }, 300);
 }
 
-app.post('/api/swing', (req, res) => {
-    const slot = req.body?.slot || 0;
+app.all('/api/swing', (req, res) => {
+    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     executeSwing(slot);
     res.json({ status: 'swung', slot });
 });
