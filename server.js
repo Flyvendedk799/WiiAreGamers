@@ -55,6 +55,8 @@ app.post('/api/start', (req, res) => {
 
     // Give Xvfb a moment to boot
     setTimeout(() => {
+        const wmProcess = require('child_process').spawn('fluxbox', ['-display', ':99']);
+
         // Start a lightweight window manager so Fullscreen requests actually work
 
 
@@ -207,7 +209,7 @@ io.on('connection', (socket) => {
                     require('child_process').exec('DISPLAY=:99 xdotool key space', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 bash -c "xdotool keydown Return; xdotool keydown space; sleep 0.1; xdotool keyup Return; xdotool keyup space"', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 bash -c "xdotool keydown Return space; sleep 0.3; xdotool keyup Return space"', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
