@@ -56,7 +56,7 @@ app.post('/api/start', (req, res) => {
     // Give Xvfb a moment to boot
     setTimeout(() => {
         // Start a lightweight window manager so Fullscreen requests actually work
-        const wmProcess = spawn('fluxbox', [], { env: { ...process.env, DISPLAY: ':99' } });
+
 
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
@@ -78,13 +78,13 @@ app.post('/api/start', (req, res) => {
             emulatorProcess = null;
             if (streamProcess) streamProcess.kill();
             xvfbProcess.kill();
-            try { wmProcess.kill(); } catch(e) {}
+
         });
 
         // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
-            '-video_size', '854x480',
+            '-video_size', '640x480',
             '-r', '30',
             '-i', ':99',
             '-f', 'mpegts',
@@ -121,7 +121,7 @@ app.post('/api/stop', (req, res) => {
         streamProcess.kill();
         streamProcess = null;
     }
-    require('child_process').exec('pkill Xvfb; pkill fluxbox');
+    require('child_process').exec('pkill Xvfb');
     res.json({ status: 'stopped' });
 });
 
@@ -206,7 +206,7 @@ io.on('connection', (socket) => {
                     require('child_process').exec('DISPLAY=:99 xdotool key space', (err) => {});
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 xdotool key Return+space', (err) => {});
+                    require('child_process').exec('DISPLAY=:99 xdotool keydown Return keydown space sleep 0.1 keyup Return keyup space', (err) => {});
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
