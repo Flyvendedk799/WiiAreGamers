@@ -145,9 +145,11 @@ let dolphinClient = null; // { port, address }
 
 // Handle DSU Handshakes from Dolphin
 udpSocket.on('message', (msg, rinfo) => {
+    console.log(`UDP msg from ${rinfo.address}:${rinfo.port}, len=${msg.length}, magic=${msg.toString('ascii', 0, 4)}`);
     // Basic verification of Magic String
     if (msg.length >= 20 && msg.toString('ascii', 0, 4) === 'DSUC') {
         const type = msg.readUInt32LE(16);
+        console.log(`DSU message type: 0x${type.toString(16)}`);
         if (type === 0x100000) {
             // Dolphin requesting Ports Info
             dolphinClient = rinfo;
@@ -157,6 +159,7 @@ udpSocket.on('message', (msg, rinfo) => {
         } else if (type === 0x100001) {
             // Dolphin subscribing to controller data
             dolphinClient = rinfo;
+            console.log('Dolphin subscribed to controller data!', rinfo);
         }
     }
 });
@@ -203,13 +206,12 @@ io.on('connection', (socket) => {
             } else if (data.type === 'button') {
                 state.buttons[data.btn] = data.state;
                 if (data.btn === 'A' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 /app/xpress.py A --hold 0.1', (err, stdout, stderr) => { if (err) console.error(err); console.log(stdout, stderr); });
+                    // Handled natively by DSU now
                 }
                 if (data.btn === 'B' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 /app/xpress.py B --hold 0.1', (err, stdout, stderr) => { if (err) console.error(err); console.log(stdout, stderr); });
+                    // Handled natively by DSU now
                 }
                 if (data.btn === 'AB' && data.state) {
-                    require('child_process').exec('DISPLAY=:99 python3 /app/xpress.py A B --hold 0.5', (err, stdout, stderr) => { if (err) console.error(err); console.log(stdout, stderr); });
                     state.buttons['A'] = true;
                     state.buttons['B'] = true;
                 } else if (data.btn === 'AB' && !data.state) {
