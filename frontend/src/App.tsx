@@ -10,6 +10,7 @@ function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [partyCode, setPartyCode] = useState<string | null>(null);
   const [players, setPlayers] = useState<number[]>([]);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const playerRef = useRef<any>(null);
 
@@ -18,10 +19,14 @@ function App() {
     socket.on('player-joined', (slot) => {
       setPlayers(prev => prev.includes(slot) ? prev : [...prev, slot]);
     });
+    socket.on('debug-input', (data) => {
+      setDebugLog(prev => [`Slot ${data.slot} | Btn: ${data.btn} | State: ${data.state}`, ...prev].slice(0, 10));
+    });
 
     return () => {
       socket.off('party-created');
       socket.off('player-joined');
+      socket.off('debug-input');
     };
   }, []);
 
@@ -80,8 +85,13 @@ function App() {
 
       <main>
         {isPlaying ? (
-          <div id="video-wrapper" className="video-container">
+          <div id="video-wrapper" className="video-container" style={{ position: 'relative' }}>
             <canvas ref={canvasRef} id="video-canvas"></canvas>
+            <div style={{ position: 'absolute', top: 10, left: 10, background: 'rgba(0,0,0,0.7)', color: '#0f0', padding: '10px', fontFamily: 'monospace', textAlign: 'left', zIndex: 100, borderRadius: '5px', pointerEvents: 'none' }}>
+              <h4>Debug Inputs:</h4>
+              {debugLog.length === 0 ? <p>No inputs received yet...</p> : null}
+              {debugLog.map((log, i) => <div key={i}>{log}</div>)}
+            </div>
           </div>
         ) : (
           <div className="library">

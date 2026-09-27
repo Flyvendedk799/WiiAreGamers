@@ -221,6 +221,11 @@ io.on('connection', (socket) => {
                 const dsuPacket = dsu.createControllerPacket(state, slot);
                 udpSocket.send(dsuPacket, dolphinClient.port, dolphinClient.address);
             }
+            
+            // Broadcast debug state to host display
+            if (data.type === 'button') {
+                io.emit('debug-input', { slot, btn: data.btn, state: data.state });
+            }
         }
     });
 
