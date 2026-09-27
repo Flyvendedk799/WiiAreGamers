@@ -49,13 +49,11 @@ export default function Controller() {
     const lastMotionEmit = useRef(0);
 
     // Gyro & Pointer State Refs
-    const baseYaw = useRef<number | null>(null);
-    const basePitch = useRef<number | null>(null);
-    const baseRoll = useRef<number | null>(null);
-    
-    const currentYaw = useRef(0);
-    const currentPitch = useRef(0);
-    const currentRoll = useRef(0);
+    const baseAx = useRef<number | null>(null);
+    const baseAy = useRef<number | null>(null);
+    const pointerX = useRef(0);
+    const pointerY = useRef(0);
+    const lastMotionTime = useRef(Date.now());
 
     const smoothStickX = useRef(0);
     const smoothStickY = useRef(0);
@@ -138,19 +136,24 @@ export default function Controller() {
         playHapticThump(80, 0.05);
         requestWakeLock();
 
+        // On iOS Safari, we must only request DeviceMotionEvent.
+        // It provides both rotationRate and gravity acceleration for laser aim and swing!
         try {
             if (typeof (DeviceMotionEvent as any)?.requestPermission === 'function') {
                 const res = await (DeviceMotionEvent as any).requestPermission();
                 if (res !== 'granted') console.warn('DeviceMotion permission not granted');
             }
-            if (typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
-                await (DeviceOrientationEvent as any).requestPermission();
-            }
-            enableSensors();
         } catch (err) {
-            console.error('Motion permission error', err);
-            enableSensors();
+            console.error('DeviceMotion permission error', err);
         }
+
+        try {
+            if (typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
+                (DeviceOrientationEvent as any).requestPermission().catch(() => {});
+            }
+        } catch (e) {}
+
+        enableSensors();
     };
 
     const triggerSwing = () => {
@@ -171,10 +174,11 @@ export default function Controller() {
         playHapticThump(120, 0.03);
         try { if (navigator.vibrate) navigator.vibrate(20); } catch (e) {}
         
-        baseYaw.current = currentYaw.current;
-        basePitch.current = currentPitch.current;
-        baseRoll.current = currentRoll.current;
+        baseAx.current = latestAccel.current.x;
+        baseAy.current = latestAccel.current.y;
         
+        pointerX.current = 0;
+        pointerY.current = 0;
         smoothStickX.current = 0;
         smoothStickY.current = 0;
 
@@ -188,99 +192,88 @@ export default function Controller() {
 
     const enableSensors = () => {
         setGyroEnabled(true);
+        lastMotionTime.current = Date.now();
 
-        // 1. DeviceOrientation for High-Precision Wii Pointer Aiming
-        window.addEventListener('deviceorientation', (event) => {
-            // Compass heading or alpha
-            let yaw = 0;
-            if ((event as any).webkitCompassHeading !== undefined && (event as any).webkitCompassHeading !== null) {
-                yaw = (event as any).webkitCompassHeading;
-            } else if (event.alpha !== null) {
-                yaw = (360 - event.alpha) % 360;
-            }
-
-            const pitch = event.beta ?? 55;
-            const roll = event.gamma ?? 0;
-
-            currentYaw.current = yaw;
-            currentPitch.current = pitch;
-            currentRoll.current = roll;
-
-            // Auto-calibrate center on first reading
-            if (baseYaw.current === null) {
-                baseYaw.current = yaw;
-                basePitch.current = pitch;
-                baseRoll.current = roll;
-            }
-
-            // If manual touch trackpad is actively touched, do not override with gyro
-            if (isTouchingTrackpad.current || !gyroAimActive) return;
-
-            // Sensitivity configurations
-            let reachX = 16.0; // degrees of horizontal wrist angle
-            let reachY = 13.0; // degrees of vertical tilt
-            if (sensitivity === 'fast') {
-                reachX = 11.0;
-                reachY = 9.0;
-            } else if (sensitivity === 'smooth') {
-                reachX = 22.0;
-                reachY = 17.0;
-            }
-
-            // Calculate shortest angular difference (-180 to +180)
-            const diffYaw = ((yaw - baseYaw.current + 540) % 360) - 180;
-            const diffPitch = pitch - (basePitch.current ?? 55);
-            const diffRoll = roll - (baseRoll.current ?? 0);
-
-            // Ergonomic wrist fusion: when pointing left/right, wrist naturally rolls slightly
-            const effectiveDiffX = diffYaw + diffRoll * 0.22;
-            const effectiveDiffY = diffPitch;
-
-            const targetX = Math.max(-1.0, Math.min(1.0, effectiveDiffX / reachX));
-            const targetY = Math.max(-1.0, Math.min(1.0, effectiveDiffY / reachY));
-
-            // Low-pass exponential moving average filter for sub-pixel jitter elimination
-            smoothStickX.current = smoothStickX.current * 0.65 + targetX * 0.35;
-            smoothStickY.current = smoothStickY.current * 0.65 + targetY * 0.35;
-        });
-
-        // 2. DeviceMotion for Physical Swings & Wii Remote Motion Physics
         window.addEventListener('devicemotion', (event) => {
             const acc = event.accelerationIncludingGravity || event.acceleration;
             const rot = event.rotationRate;
-            if (acc) {
-                const G = 9.80665;
-                const ax = -(acc.x || 0) / G;
-                const ay = -(acc.y || 0) / G;
-                const az = (acc.z || 0) / G;
+            if (!acc) return;
 
-                const pitch = rot?.beta || 0;
-                const roll = rot?.gamma || 0;
-                const yaw = rot?.alpha || 0;
+            const G = 9.80665;
+            const ax = -(acc.x || 0) / G;
+            const ay = -(acc.y || 0) / G;
+            const az = (acc.z || 0) / G;
 
-                latestAccel.current = { x: ax, y: ay, z: az };
-                latestGyro.current = { pitch, yaw, roll };
+            const pitch = rot?.beta || 0;
+            const roll = rot?.gamma || 0;
+            const yaw = rot?.alpha || 0;
 
-                // Swing gesture detection
-                const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
-                const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
-                const now = Date.now();
+            latestAccel.current = { x: ax, y: ay, z: az };
+            latestGyro.current = { pitch, yaw, roll };
 
-                if ((totalAccel > 2.0 || rotMagnitude > 240) && (now - lastSwingTime.current > 320)) {
-                    lastSwingTime.current = now;
-                    triggerSwing();
-                }
+            const now = Date.now();
 
-                // Continuous stream at 60Hz (~16ms) matching Dolphin DSU input rate
-                if (now - lastMotionEmit.current > 16) {
-                    lastMotionEmit.current = now;
-                    socket.emit('controller-input', {
-                        type: 'motion',
-                        stick: { x: smoothStickX.current, y: smoothStickY.current },
-                        accel: latestAccel.current,
-                        gyro: latestGyro.current
-                    });
-                }
+            // Auto-calibrate center on first reading
+            if (baseAy.current === null) {
+                baseAx.current = ax;
+                baseAy.current = ay;
+            }
+
+            // 1. Physical Tennis Swing Detection
+            const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
+            const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
+
+            if ((totalAccel > 2.0 || rotMagnitude > 240) && (now - lastSwingTime.current > 350)) {
+                lastSwingTime.current = now;
+                triggerSwing();
+            }
+
+            // 2. High-Precision Laser Pointer Fusion (Powered by devicemotion)
+            // If manual touch trackpad is touched, or laser aim is disabled, or mid-swing: pause gyro pointer
+            const isMidSwing = (now - lastSwingTime.current < 350);
+
+            if (!isTouchingTrackpad.current && gyroAimActive && !isMidSwing) {
+                const dt = Math.min(0.05, Math.max(0.005, (now - lastMotionTime.current) / 1000));
+                lastMotionTime.current = now;
+
+                let sensMultiplier = 1.0;
+                if (sensitivity === 'fast') sensMultiplier = 1.4;
+                if (sensitivity === 'smooth') sensMultiplier = 0.75;
+
+                // In portrait mode:
+                // rot.gamma: turning wrist left/right (aiming across the screen)
+                // rot.beta: tilting phone up/down (aiming vertical)
+                const gyroDeltaX = (rot?.gamma || 0) * dt * 0.035 * sensMultiplier;
+                const gyroDeltaY = -(rot?.beta || 0) * dt * 0.035 * sensMultiplier;
+
+                // Absolute tilt anchor from gravity vector (prevents drift!)
+                const tiltAnchorX = (ax - (baseAx.current ?? 0)) * 2.0 * sensMultiplier;
+                const tiltAnchorY = -((ay - (baseAy.current ?? -0.7)) * 2.0 * sensMultiplier);
+
+                // Complementary filter: 90% gyro integration + 10% gravity anchor
+                pointerX.current = pointerX.current * 0.90 + gyroDeltaX + tiltAnchorX * 0.10;
+                pointerY.current = pointerY.current * 0.90 + gyroDeltaY + tiltAnchorY * 0.10;
+
+                // Clamp to screen range [-1.0, 1.0]
+                pointerX.current = Math.max(-1.0, Math.min(1.0, pointerX.current));
+                pointerY.current = Math.max(-1.0, Math.min(1.0, pointerY.current));
+
+                // Smooth with exponential filter
+                smoothStickX.current = smoothStickX.current * 0.65 + pointerX.current * 0.35;
+                smoothStickY.current = smoothStickY.current * 0.65 + pointerY.current * 0.35;
+            } else {
+                lastMotionTime.current = now;
+            }
+
+            // 3. Continuous DSU input stream at 30Hz (~33ms) matching video stream
+            if (now - lastMotionEmit.current > 30) {
+                lastMotionEmit.current = now;
+                socket.emit('controller-input', {
+                    type: 'motion',
+                    stick: { x: smoothStickX.current, y: smoothStickY.current },
+                    accel: latestAccel.current,
+                    gyro: latestGyro.current
+                });
             }
         });
     };

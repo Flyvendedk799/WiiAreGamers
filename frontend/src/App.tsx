@@ -36,6 +36,8 @@ function App() {
     };
   }, []);
 
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+
   useEffect(() => {
     if (isPlaying && canvasRef.current && !playerRef.current) {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -47,7 +49,13 @@ function App() {
         {
           canvas: canvasRef.current,
           autoplay: true,
-          loop: false
+          loop: false,
+          control: false
+        },
+        {
+          audio: true,
+          videoBufferSize: 512 * 1024,
+          audioBufferSize: 128 * 1024
         }
       );
     }
@@ -59,6 +67,18 @@ function App() {
       }
     };
   }, [isPlaying]);
+
+  const unlockAudio = () => {
+    try {
+      if (playerRef.current?.player?.audioOut) {
+        playerRef.current.player.audioOut.unlock?.();
+        if (playerRef.current.player.audioOut.context?.state === 'suspended') {
+          playerRef.current.player.audioOut.context.resume();
+        }
+      }
+      setIsAudioEnabled(true);
+    } catch (e) {}
+  };
 
   const startGame = async () => {
     const res = await fetch('/api/start', { method: 'POST' });
@@ -136,8 +156,11 @@ function App() {
             <canvas 
               ref={canvasRef} 
               id="video-canvas"
-              onClick={() => pressButton('A')}
-              title="Click to press A"
+              onClick={() => {
+                pressButton('A');
+                if (!isAudioEnabled) unlockAudio();
+              }}
+              title="Click to press A and enable sound"
               style={{ width: '100%', height: 'auto', display: 'block', aspectRatio: '16/9', cursor: 'pointer' }}
             ></canvas>
 
@@ -150,6 +173,22 @@ function App() {
               gap: '8px',
               zIndex: 10
             }}>
+              <button 
+                onClick={unlockAudio}
+                style={{
+                  background: isAudioEnabled ? '#10b981' : '#f59e0b',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '8px 14px',
+                  borderRadius: '6px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
+                }}
+              >
+                {isAudioEnabled ? '🔊 Sound Active' : '🔇 Enable Sound'}
+              </button>
+
               <button 
                 onClick={triggerSwing}
                 style={{

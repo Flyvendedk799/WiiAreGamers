@@ -48,11 +48,16 @@ app.post('/api/start', (req, res) => {
     
     // Clean up any stale X11 lock files or zombie processes
     try {
-        require('child_process').execSync('pkill -9 Xvfb; pkill -9 fluxbox; pkill -9 ffmpeg; pkill -9 dolphin || true');
+        require('child_process').execSync('pkill -9 Xvfb; pkill -9 fluxbox; pkill -9 ffmpeg; pkill -9 dolphin; pkill -9 pulseaudio || true');
     } catch (e) {}
     try {
         if (fs.existsSync('/tmp/.X99-lock')) fs.unlinkSync('/tmp/.X99-lock');
         if (fs.existsSync('/tmp/.X11-unix/X99')) fs.unlinkSync('/tmp/.X11-unix/X99');
+    } catch (e) {}
+
+    // Initialize PulseAudio daemon for in-game sound
+    try {
+        require('child_process').execSync('pulseaudio --start --exit-idle-time=-1 || true');
     } catch (e) {}
 
     // Spawn Xvfb manually with access control disabled (-ac)
@@ -63,7 +68,7 @@ app.post('/api/start', (req, res) => {
         '-ac'
     ]);
 
-    // Give Xvfb a moment to boot
+    // Give Xvfb and PulseAudio a moment to boot
     setTimeout(() => {
         try {
             if (!fs.existsSync('/root/.fluxbox')) fs.mkdirSync('/root/.fluxbox', { recursive: true });
@@ -72,15 +77,14 @@ app.post('/api/start', (req, res) => {
         } catch (e) {}
         const wmProcess = require('child_process').spawn('fluxbox', ['-display', ':99']);
 
-        // Start a lightweight window manager so Fullscreen requests actually work
-
-
+        // Start Dolphin with Pulse audio backend for game sound and real-time clock synchronization
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
             '-p', 'x11',
             '-C', 'Core.CPUThread=True',
             '-C', 'Core.Fastmem=True',
             '-C', 'Core.DSPHLE=True',
+            '-C', 'Core.AudioBackend=Pulse',
             '-C', 'Core.SyncGPU=False',
             '-C', 'Core.SyncOnSkipIdle=True',
             '-C', 'Wii.Widescreen=True',
@@ -103,22 +107,28 @@ app.post('/api/start', (req, res) => {
             xvfbProcess.kill();
         });
 
-        // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG at smooth 60 FPS
+        // Start FFmpeg to capture both video and stereo audio with synchronized zero-latency streaming
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
+            '-thread_queue_size', '512',
             '-video_size', '854x480',
-            '-framerate', '60',
+            '-r', '30',
             '-i', ':99',
+            '-f', 'pulse',
+            '-thread_queue_size', '512',
+            '-i', 'default',
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
             '-s', '854x480',
-            '-b:v', '4000k',
-            '-maxrate', '5000k',
-            '-bufsize', '2000k',
+            '-b:v', '2000k',
+            '-maxrate', '2500k',
+            '-bufsize', '1000k',
             '-bf', '0',
             '-g', '30',
-            '-qmin', '2',
-            '-qmax', '6',
+            '-codec:a', 'mp2',
+            '-ar', '44100',
+            '-ac', '2',
+            '-b:a', '128k',
             '-'
         ]);
 
@@ -134,7 +144,7 @@ app.post('/api/start', (req, res) => {
         streamProcess.stderr.on('data', (data) => {
             // console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
         });
-    }, 500);
+    }, 600);
 
     res.json({ status: 'started' });
 });
