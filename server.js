@@ -133,6 +133,26 @@ const controllerStates = {
 let currentPartyCode = null;
 let activePlayers = []; // index = slot, value = socket.id
 
+let dolphinClient = null; // { port, address }
+
+// Handle DSU Handshakes from Dolphin
+udpSocket.on('message', (msg, rinfo) => {
+    // Basic verification of Magic String
+    if (msg.length >= 20 && msg.toString('ascii', 0, 4) === 'DSUC') {
+        const type = msg.readUInt32LE(16);
+        if (type === 0x100000) {
+            // Dolphin requesting Ports Info
+            dolphinClient = rinfo;
+            const res = dsu.createPortsInfoPacket();
+            udpSocket.send(res, rinfo.port, rinfo.address);
+            console.log('DSU Handshake with Dolphin successful!', rinfo);
+        } else if (type === 0x100001) {
+            // Dolphin subscribing to controller data
+            dolphinClient = rinfo;
+        }
+    }
+});
+
 // Handle WebSocket controller inputs from our custom mobile web UI
 io.on('connection', (socket) => {
     console.log('Client connected via Socket.io:', socket.id);
@@ -147,7 +167,7 @@ io.on('connection', (socket) => {
 
     // Mobile joins a party
     socket.on('join-party', (code) => {
-        if (code.toUpperCase() === currentPartyCode) {
+        if (currentPartyCode && code.toUpperCase() === currentPartyCode) {
             let slot = activePlayers.indexOf(socket.id);
             if (slot === -1) {
                 if (activePlayers.length < 4) {
@@ -175,16 +195,17 @@ io.on('connection', (socket) => {
                 state.buttons[data.btn] = data.state;
             }
 
-            const dsuPacket = dsu.createControllerPacket(state, slot);
-            udpSocket.send(dsuPacket, 26760, '127.0.0.1');
+            // Only send to Dolphin if Dolphin has subscribed via DSU Handshake
+            if (dolphinClient) {
+                const dsuPacket = dsu.createControllerPacket(state, slot);
+                udpSocket.send(dsuPacket, dolphinClient.port, dolphinClient.address);
+            }
         }
     });
 
     socket.on('disconnect', () => {
         const slot = activePlayers.indexOf(socket.id);
         if (slot !== -1) {
-            // We could remove them, but for now we leave the slot reserved until party reset
-            // so they can reconnect if they refresh.
             console.log(`Player ${slot} disconnected`);
         }
     });

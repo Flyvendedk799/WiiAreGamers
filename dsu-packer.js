@@ -1,4 +1,4 @@
-const crc32 = require('crc-32');
+﻿const crc32 = require('crc-32');
 
 class DSUPacker {
     constructor() {
@@ -6,37 +6,57 @@ class DSUPacker {
         this.packetId = 0;
     }
 
+    createHeader(payloadLength) {
+        const buffer = Buffer.alloc(16);
+        buffer.write('DSUC', 0); // Magic
+        buffer.writeUInt16LE(1001, 4); // Protocol
+        buffer.writeUInt16LE(payloadLength, 6);
+        buffer.writeUInt32LE(0, 8); // CRC (0 for now)
+        buffer.writeUInt32LE(this.serverId, 12);
+        return buffer;
+    }
+
+    createPortsInfoPacket() {
+        const payloadLength = 16; 
+        const header = this.createHeader(payloadLength);
+        const payload = Buffer.alloc(payloadLength);
+        
+        payload.writeUInt32LE(0x100000, 0); // Message type: Info
+        payload.writeUInt8(0, 4); // Slot 0
+        payload.writeUInt8(2, 5); // Connected
+        payload.writeUInt8(2, 6); // Full Gyro
+        payload.writeUInt8(1, 7); // USB
+        // MAC (00:11:22:33:44:55)
+        payload.writeUInt8(0x00, 8); payload.writeUInt8(0x11, 9); payload.writeUInt8(0x22, 10);
+        payload.writeUInt8(0x33, 11); payload.writeUInt8(0x44, 12); payload.writeUInt8(0x55, 13);
+        payload.writeUInt8(5, 14); // Battery Full
+        payload.writeUInt8(0, 15); // Padding (Active state is not in ports info, wait, let me check spec)
+
+        const packet = Buffer.concat([header, payload]);
+        packet.writeUInt32LE(crc32.buf(packet) >>> 0, 8);
+        return packet;
+    }
+
     createControllerPacket(data, slot = 0) {
         this.packetId++;
-        const buffer = Buffer.alloc(100);
+        const payloadLength = 84;
+        const header = this.createHeader(payloadLength);
+        const payload = Buffer.alloc(payloadLength);
 
-        // --- HEADER (16 bytes) ---
-        buffer.write('DSUC', 0); // Magic string
-        buffer.writeUInt16LE(1001, 4); // Protocol version
-        buffer.writeUInt16LE(84, 6); // Payload length (100 - 16 = 84 bytes)
-        buffer.writeUInt32LE(0, 8); // CRC32 (placeholder)
-        buffer.writeUInt32LE(this.serverId, 12); // Server ID
-
-        // --- PAYLOAD (84 bytes) ---
-        buffer.writeUInt32LE(0x100002, 16); // Message type: Controller Data
-        buffer.writeUInt8(slot, 20); // Slot
-        buffer.writeUInt8(2, 21); // Slot State: Connected
-        buffer.writeUInt8(2, 22); // Device Model: Full Gyro
-        buffer.writeUInt8(1, 23); // Connection Type: USB
+        payload.writeUInt32LE(0x100002, 0); // Type: Data
+        payload.writeUInt8(slot, 4);
+        payload.writeUInt8(2, 5);
+        payload.writeUInt8(2, 6);
+        payload.writeUInt8(1, 7);
         
-        // MAC Address (6 bytes)
-        buffer.writeUInt8(0x00, 24);
-        buffer.writeUInt8(0x11, 25);
-        buffer.writeUInt8(0x22, 26);
-        buffer.writeUInt8(0x33, 27);
-        buffer.writeUInt8(0x44, 28);
-        buffer.writeUInt8(0x55 + slot, 29);
+        payload.writeUInt8(0x00, 8); payload.writeUInt8(0x11, 9); payload.writeUInt8(0x22, 10);
+        payload.writeUInt8(0x33, 11); payload.writeUInt8(0x44, 12); payload.writeUInt8(0x55 + slot, 13);
 
-        buffer.writeUInt8(5, 30); // Battery status: Full
-        buffer.writeUInt8(1, 31); // Device state: Active
-        buffer.writeUInt32LE(this.packetId, 32); // Packet ID
+        payload.writeUInt8(5, 14); // Battery
+        payload.writeUInt8(1, 15); // State (Active)
+        payload.writeUInt32LE(this.packetId, 16);
 
-        // Buttons Bitmask (4 bytes, starting at 36)
+        // Buttons (20)
         let buttonsMask = 0;
         if (data.buttons?.LEFT) buttonsMask |= (1 << 0);
         if (data.buttons?.DOWN) buttonsMask |= (1 << 1);
@@ -44,47 +64,38 @@ class DSUPacker {
         if (data.buttons?.UP) buttonsMask |= (1 << 3);
         if (data.buttons?.A) buttonsMask |= (1 << 12);
         if (data.buttons?.B) buttonsMask |= (1 << 13);
-        buffer.writeUInt32LE(buttonsMask, 36);
+        payload.writeUInt32LE(buttonsMask, 20);
 
-        // Left Analog (40) and Right Analog (42) - 0x80 is center
-        buffer.writeUInt8(0x80, 40); // LX
-        buffer.writeUInt8(0x80, 41); // LY
-        buffer.writeUInt8(0x80, 42); // RX
-        buffer.writeUInt8(0x80, 43); // RY
+        payload.writeUInt8(0x80, 24); // LX
+        payload.writeUInt8(0x80, 25); // LY
+        payload.writeUInt8(0x80, 26); // RX
+        payload.writeUInt8(0x80, 27); // RY
 
-        // Analog Buttons (44 to 55) - we'll just set them to 0 or 255 based on digital buttons
-        // Order: DPad Left, Down, Right, Up, Y, B, A, X, R1, L1, R2, L2
-        buffer.writeUInt8(data.buttons?.LEFT ? 0xFF : 0, 44);
-        buffer.writeUInt8(data.buttons?.DOWN ? 0xFF : 0, 45);
-        buffer.writeUInt8(data.buttons?.RIGHT ? 0xFF : 0, 46);
-        buffer.writeUInt8(data.buttons?.UP ? 0xFF : 0, 47);
-        buffer.writeUInt8(0, 48); // Y
-        buffer.writeUInt8(data.buttons?.B ? 0xFF : 0, 49); // B
-        buffer.writeUInt8(data.buttons?.A ? 0xFF : 0, 50); // A
-        buffer.writeUInt8(0, 51); // X
-        // Skip rest to 55 (defaults to 0)
+        payload.writeUInt8(data.buttons?.LEFT ? 0xFF : 0, 28);
+        payload.writeUInt8(data.buttons?.DOWN ? 0xFF : 0, 29);
+        payload.writeUInt8(data.buttons?.RIGHT ? 0xFF : 0, 30);
+        payload.writeUInt8(data.buttons?.UP ? 0xFF : 0, 31);
+        payload.writeUInt8(0, 32); // Y
+        payload.writeUInt8(data.buttons?.B ? 0xFF : 0, 33); // B
+        payload.writeUInt8(data.buttons?.A ? 0xFF : 0, 34); // A
+        payload.writeUInt8(0, 35); // X
+        // R1 L1 R2 L2 are 36-39 (default 0)
 
-        // Timestamp (8 bytes, 68) - using microseconds
         const hrtime = process.hrtime();
         const micros = hrtime[0] * 1000000 + Math.round(hrtime[1] / 1000);
-        buffer.writeBigUInt64LE(BigInt(micros), 68);
+        payload.writeBigUInt64LE(BigInt(micros), 52);
 
-        // Accelerometer (76) - X, Y, Z floats (in Gs)
-        buffer.writeFloatLE(data.accel?.x || 0.0, 76);
-        buffer.writeFloatLE(data.accel?.y || -1.0, 80); // gravity is usually -1 on y or z depending on orientation
-        buffer.writeFloatLE(data.accel?.z || 0.0, 84);
+        payload.writeFloatLE(data.accel?.x || 0.0, 60);
+        payload.writeFloatLE(data.accel?.y || -1.0, 64);
+        payload.writeFloatLE(data.accel?.z || 0.0, 68);
 
-        // Gyroscope (88) - Pitch, Yaw, Roll floats (in deg/s)
-        buffer.writeFloatLE(data.gyro?.pitch || 0.0, 88);
-        buffer.writeFloatLE(data.gyro?.yaw || 0.0, 92);
-        buffer.writeFloatLE(data.gyro?.roll || 0.0, 96);
+        payload.writeFloatLE(data.gyro?.pitch || 0.0, 72);
+        payload.writeFloatLE(data.gyro?.yaw || 0.0, 76);
+        payload.writeFloatLE(data.gyro?.roll || 0.0, 80);
 
-        // Compute CRC32
-        const crc = crc32.buf(buffer, 0) >>> 0; // unsigned
-        buffer.writeUInt32LE(crc, 8);
-
-        return buffer;
+        const packet = Buffer.concat([header, payload]);
+        packet.writeUInt32LE(crc32.buf(packet) >>> 0, 8);
+        return packet;
     }
 }
-
 module.exports = { DSUPacker };
