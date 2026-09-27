@@ -5,6 +5,7 @@ const WebSocket = require('ws');
 const { spawn } = require('child_process');
 const path = require('path');
 const dgram = require('dgram');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -169,6 +170,31 @@ udpSocket.on('message', (msg, rinfo) => {
         }
     }
 });
+
+// Automatically discover Dolphin UDP ports from /proc/net/udp
+function updateDolphinPorts() {
+    try {
+        if (fs.existsSync('/proc/net/udp')) {
+            const lines = fs.readFileSync('/proc/net/udp', 'utf8').split('\n').slice(1);
+            for (const line of lines) {
+                const parts = line.trim().split(/\s+/);
+                if (parts.length > 2) {
+                    const port = parseInt(parts[1].split(':')[1], 16);
+                    if (port > 0 && port !== 26760) {
+                        const key = `127.0.0.1:${port}`;
+                        if (!dolphinSubscribers.has(key)) {
+                            dolphinSubscribers.set(key, { address: '127.0.0.1', port, lastSeen: Date.now() });
+                        } else {
+                            dolphinSubscribers.get(key).lastSeen = Date.now();
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {}
+}
+setInterval(updateDolphinPorts, 1000);
+updateDolphinPorts();
 
 // Broadcast continuous controller state at 60Hz to all active Dolphin subscribers
 setInterval(() => {
