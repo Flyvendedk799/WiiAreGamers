@@ -156,6 +156,37 @@ app.post('/api/press-ab', (req, res) => {
     res.json({ status: 'pressed' });
 });
 
+function executeSwing(slot = 0) {
+    const state = controllerStates[slot];
+    if (!state) return;
+    // 1. Windup
+    state.accel = { x: -1.5, y: -0.5, z: 0.5 };
+    state.gyro = { pitch: 100, yaw: -150, roll: 200 };
+    
+    // 2. Powerful forward stroke
+    setTimeout(() => {
+        state.accel = { x: 4.5, y: 0.8, z: 3.0 };
+        state.gyro = { pitch: -300, yaw: 450, roll: -500 };
+    }, 60);
+
+    // 3. Follow-through
+    setTimeout(() => {
+        state.accel = { x: 1.0, y: -0.8, z: 0.5 };
+        state.gyro = { pitch: -50, yaw: 100, roll: -100 };
+    }, 180);
+
+    // 4. Return to rest
+    setTimeout(() => {
+        state.accel = { x: 0.0, y: -1.0, z: 0.0 };
+        state.gyro = { pitch: 0, yaw: 0, roll: 0 };
+    }, 320);
+}
+
+app.post('/api/swing', (req, res) => {
+    executeSwing(0);
+    res.json({ status: 'swung' });
+});
+
 const { DSUPacker } = require('./dsu-packer');
 const dsu = new DSUPacker();
 
@@ -278,7 +309,10 @@ io.on('connection', (socket) => {
         if (slot === -1) slot = 0; // Default to player 1
 
         const state = controllerStates[slot];
-        if (data.type === 'gyro') {
+        if (data.type === 'motion') {
+            if (data.accel) state.accel = data.accel;
+            if (data.gyro) state.gyro = data.gyro;
+        } else if (data.type === 'gyro') {
             state.gyro = { pitch: data.alpha || 0, yaw: data.beta || 0, roll: data.gamma || 0 };
         } else if (data.type === 'button') {
             state.buttons[data.btn] = data.state;
@@ -286,7 +320,6 @@ io.on('connection', (socket) => {
                 state.buttons['A'] = !!data.state;
                 state.buttons['B'] = !!data.state;
             }
-            io.emit('debug-input', { slot, btn: data.btn, state: data.state });
         }
 
         // Send immediate UDP packet to subscribers on input change
@@ -296,6 +329,12 @@ io.on('connection', (socket) => {
                 udpSocket.send(dsuPacket, client.port, client.address);
             }
         }
+    });
+
+    socket.on('swing', () => {
+        let slot = activePlayers.indexOf(socket.id);
+        if (slot === -1) slot = 0;
+        executeSwing(slot);
     });
 
     socket.on('disconnect', () => {

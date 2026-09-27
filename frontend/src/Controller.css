@@ -87,3 +87,20 @@
 
 .btn-a { background: #dc3545; }
 .btn-b { background: #28a745; }
+
+.btn-swing {
+    padding: 16px 36px;
+    font-size: 1.4rem;
+    background: #ff5722;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-weight: bold;
+    box-shadow: 0 4px 15px rgba(255, 87, 34, 0.4);
+    margin-bottom: 20px;
+    cursor: pointer;
+}
+.btn-swing:active {
+    transform: scale(0.92);
+    background: #e64a19;
+}

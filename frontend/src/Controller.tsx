@@ -39,39 +39,63 @@ export default function Controller() {
     };
 
     const requestGyroPermission = async () => {
-        // iOS requires explicit permission for DeviceOrientation
-        if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
-            try {
-                const permission = await (DeviceOrientationEvent as any).requestPermission();
-                if (permission === 'granted') {
-                    enableGyro();
-                }
-            } catch (err) {
-                console.error('Gyro permission error', err);
+        try {
+            if (typeof (DeviceMotionEvent as any)?.requestPermission === 'function') {
+                const res = await (DeviceMotionEvent as any).requestPermission();
+                if (res !== 'granted') console.warn('DeviceMotion permission not granted');
             }
-        } else {
-            enableGyro();
+            if (typeof (DeviceOrientationEvent as any)?.requestPermission === 'function') {
+                await (DeviceOrientationEvent as any).requestPermission();
+            }
+            enableMotion();
+        } catch (err) {
+            console.error('Motion permission error', err);
+            enableMotion();
         }
     };
 
-    const enableGyro = () => {
+    const enableMotion = () => {
         setGyroEnabled(true);
-        window.addEventListener('deviceorientation', (event) => {
-            // Send Gyro data to server
-            socket.emit('controller-input', {
-                type: 'gyro',
-                alpha: event.alpha, // z axis
-                beta: event.beta,   // x axis
-                gamma: event.gamma  // y axis
-            });
+
+        // Listen to devicemotion for true accelerometer (Gs) and angular rotation velocity (deg/s)
+        window.addEventListener('devicemotion', (event) => {
+            const acc = event.accelerationIncludingGravity || event.acceleration;
+            const rot = event.rotationRate;
+            if (acc) {
+                const G = 9.80665;
+                // Phone held pointing forward like a Wiimote:
+                // ax: lateral left/right
+                // ay: up/down
+                // az: forward/back
+                const ax = -(acc.x || 0) / G;
+                const ay = -(acc.y || 0) / G;
+                const az = (acc.z || 0) / G;
+
+                const pitch = rot?.beta || 0;
+                const roll = rot?.gamma || 0;
+                const yaw = rot?.alpha || 0;
+
+                socket.emit('controller-input', {
+                    type: 'motion',
+                    accel: { x: ax, y: ay, z: az },
+                    gyro: { pitch, yaw, roll }
+                });
+            }
         });
     };
 
     const handleButton = (btn: string, state: boolean) => {
+        try { if (state && navigator.vibrate) navigator.vibrate(30); } catch (e) {}
         socket.emit('controller-input', { type: 'button', btn, state });
         if (btn === 'AB' && state) {
             fetch('/api/press-ab', { method: 'POST' }).catch(() => {});
         }
+    };
+
+    const triggerSwing = () => {
+        try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) {}
+        socket.emit('swing');
+        fetch('/api/swing', { method: 'POST' }).catch(() => {});
     };
 
     if (!joinedSlot) {
@@ -99,37 +123,53 @@ export default function Controller() {
 
     return (
         <div className="controller-ui">
-            <h2>Player {joinedSlot} Web Controller</h2>
-            <div className="status">
+            <h2 style={{ margin: '10px 0' }}>Player {joinedSlot} Wiimote</h2>
+            <div className="status" style={{ marginBottom: '15px' }}>
                 Status: {connected ? '🟢 Connected' : '🔴 Disconnected'}
             </div>
             
             {!gyroEnabled ? (
                 <button className="gyro-btn" onClick={requestGyroPermission}>
-                    Enable Motion/Gyro
+                    📡 Enable Motion / Swing Tracking
                 </button>
             ) : (
-                <div className="gyro-status">Motion Active 📡</div>
+                <div className="gyro-status">Motion Tracking Active 📡</div>
             )}
+
+            <button 
+                className="btn-swing"
+                onTouchStart={(e) => { e.preventDefault(); triggerSwing(); }}
+                onMouseDown={(e) => { e.preventDefault(); triggerSwing(); }}
+            >
+                🎾 Swing / Hit
+            </button>
 
             <div className="d-pad">
                 <button 
-                    onPointerDown={() => handleButton('UP', true)} 
-                    onPointerUp={() => handleButton('UP', false)}
+                    onTouchStart={(e) => { e.preventDefault(); handleButton('UP', true); }} 
+                    onTouchEnd={(e) => { e.preventDefault(); handleButton('UP', false); }}
+                    onMouseDown={(e) => { e.preventDefault(); handleButton('UP', true); }} 
+                    onMouseUp={(e) => { e.preventDefault(); handleButton('UP', false); }}
                 >UP</button>
                 <div className="d-pad-middle">
                     <button 
-                        onPointerDown={() => handleButton('LEFT', true)} 
-                        onPointerUp={() => handleButton('LEFT', false)}
+                        onTouchStart={(e) => { e.preventDefault(); handleButton('LEFT', true); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); handleButton('LEFT', false); }}
+                        onMouseDown={(e) => { e.preventDefault(); handleButton('LEFT', true); }} 
+                        onMouseUp={(e) => { e.preventDefault(); handleButton('LEFT', false); }}
                     >L</button>
                     <button 
-                        onPointerDown={() => handleButton('RIGHT', true)} 
-                        onPointerUp={() => handleButton('RIGHT', false)}
+                        onTouchStart={(e) => { e.preventDefault(); handleButton('RIGHT', true); }} 
+                        onTouchEnd={(e) => { e.preventDefault(); handleButton('RIGHT', false); }}
+                        onMouseDown={(e) => { e.preventDefault(); handleButton('RIGHT', true); }} 
+                        onMouseUp={(e) => { e.preventDefault(); handleButton('RIGHT', false); }}
                     >R</button>
                 </div>
                 <button 
-                    onPointerDown={() => handleButton('DOWN', true)} 
-                    onPointerUp={() => handleButton('DOWN', false)}
+                    onTouchStart={(e) => { e.preventDefault(); handleButton('DOWN', true); }} 
+                    onTouchEnd={(e) => { e.preventDefault(); handleButton('DOWN', false); }}
+                    onMouseDown={(e) => { e.preventDefault(); handleButton('DOWN', true); }} 
+                    onMouseUp={(e) => { e.preventDefault(); handleButton('DOWN', false); }}
                 >DOWN</button>
             </div>
 
@@ -160,7 +200,7 @@ export default function Controller() {
                     onMouseDown={(e) => { e.preventDefault(); handleButton('AB', true); }} 
                     onMouseUp={(e) => { e.preventDefault(); handleButton('AB', false); }}
                     onMouseLeave={() => handleButton('AB', false)}
-                    style={{ padding: '15px 30px', fontSize: '1.2rem', background: '#ffaa00', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                    style={{ padding: '12px 24px', fontSize: '1.1rem', background: '#ffaa00', color: '#000', border: 'none', borderRadius: '8px', fontWeight: 'bold', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
                 >
                     Press A+B (Menu)
                 </button>
