@@ -41,8 +41,8 @@ RUN mkdir -p /root/.survhub/service-data/dolphin/roms
 RUN mkdir -p /root/.survhub/service-data/dolphin/saves
 RUN mkdir -p /root/.config/dolphin-emu
 
-RUN echo "[Core]\nAudioBackend = Null\nEnableAlternateInputSources = True\n[Wii]\nWidescreen = True\n" > /root/.config/dolphin-emu/Dolphin.ini
-RUN echo "[Settings]\nAspectRatio = 1\nFullscreen = True\n" > /root/.config/dolphin-emu/GFX.ini
+COPY Dolphin.ini /root/.config/dolphin-emu/Dolphin.ini
+COPY GFX.ini /root/.config/dolphin-emu/GFX.ini
 RUN echo "[Server]\nEnabled = True\nEntries = DSU:127.0.0.1:26760;\n" > /root/.config/dolphin-emu/DSUClient.ini && cp /root/.config/dolphin-emu/DSUClient.ini /root/.config/dolphin-emu/DualShockUDPClient.ini
 COPY WiimoteNew.ini /root/.config/dolphin-emu/WiimoteNew.ini
 

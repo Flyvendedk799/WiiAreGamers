@@ -1,0 +1,16 @@
+{
+  "short_name": "Wiimote",
+  "name": "Wii Remote Controller",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/controller",
+  "background_color": "#0f172a",
+  "theme_color": "#0088ff",
+  "display": "standalone",
+  "orientation": "portrait"
+}

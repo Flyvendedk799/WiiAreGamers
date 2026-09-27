@@ -78,6 +78,12 @@ app.post('/api/start', (req, res) => {
         emulatorProcess = spawn(dolphinPath, [
             '-e', romPath,
             '-p', 'x11',
+            '-C', 'Core.CPUThread=True',
+            '-C', 'Core.Fastmem=True',
+            '-C', 'Core.DSPHLE=True',
+            '-C', 'Core.SyncGPU=False',
+            '-C', 'Core.SyncOnSkipIdle=True',
+            '-C', 'Wii.Widescreen=True',
             '-C', 'Display.Fullscreen=True'
         ], {
             env: {
@@ -95,20 +101,24 @@ app.post('/api/start', (req, res) => {
             emulatorProcess = null;
             if (streamProcess) streamProcess.kill();
             xvfbProcess.kill();
-
         });
 
-        // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG
+        // Start FFmpeg to capture Xvfb and stream it as MPEG1 for JSMPEG at smooth 60 FPS
         streamProcess = spawn('ffmpeg', [
             '-f', 'x11grab',
             '-video_size', '854x480',
-            '-r', '30',
+            '-framerate', '60',
             '-i', ':99',
             '-f', 'mpegts',
             '-codec:v', 'mpeg1video',
             '-s', '854x480',
-            '-b:v', '2000k',
+            '-b:v', '4000k',
+            '-maxrate', '5000k',
+            '-bufsize', '2000k',
             '-bf', '0',
+            '-g', '30',
+            '-qmin', '2',
+            '-qmax', '6',
             '-'
         ]);
 
@@ -122,7 +132,7 @@ app.post('/api/start', (req, res) => {
         });
 
         streamProcess.stderr.on('data', (data) => {
-            console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
+            // console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
         });
     }, 500);
 
