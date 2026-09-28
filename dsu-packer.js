@@ -77,7 +77,7 @@ class DSUPacker {
 
     createControllerPacket(data, slot = 0) {
         this.packetId++;
-        const payloadLength = 76;
+        const payloadLength = 84;
         const header = this.createHeader(payloadLength);
         const payload = Buffer.alloc(payloadLength);
 
