@@ -161,6 +161,7 @@ app.post('/api/start', (req, res) => {
         });
 
         let mjpegBuffer = Buffer.alloc(0);
+        let frameCount = 0;
         streamProcess.stdio[3].on('data', (data) => {
             mjpegBuffer = Buffer.concat([mjpegBuffer, data]);
             let start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
@@ -169,13 +170,18 @@ app.post('/api/start', (req, res) => {
             while (start !== -1 && end !== -1) {
                 let frame = mjpegBuffer.slice(start, end + 2);
                 mjpegBuffer = mjpegBuffer.slice(end + 2);
+                frameCount++;
                 
                 wssMjpeg.clients.forEach(client => {
-                    // Absolute Zero Latency Check: Drop frame if websocket is still sending previous frame!
-                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount === 0) {
-                        client.send(frame);
+                    // Send if buffer is small (< 100KB, about 3-5 frames)
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 100000) {
+                        client.send(frame.toString('base64'));
                     }
                 });
+                
+                if (frameCount % 100 === 0 && wssMjpeg.clients.size > 0) {
+                    console.log(`Sent 100 MJPEG frames. Clients: ${wssMjpeg.clients.size}`);
+                }
                 
                 start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
                 end = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD9]), start);

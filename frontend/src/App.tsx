@@ -62,12 +62,9 @@ function App() {
       // Setup Zero-Latency Video Stream via MJPEG
       const mjpegUrl = `${wsProtocol}//${window.location.host}/mjpeg-stream`;
       const mjpegWs = new WebSocket(mjpegUrl);
-      mjpegWs.binaryType = 'blob';
       
-      let lastUrl = '';
       mjpegWs.onmessage = (event) => {
-        if (!canvasRef.current) return;
-        const url = URL.createObjectURL(event.data);
+        if (!canvasRef.current || typeof event.data !== 'string') return;
         const img = new Image();
         img.onload = () => {
           if (canvasRef.current) {
@@ -76,11 +73,8 @@ function App() {
               ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
             }
           }
-          URL.revokeObjectURL(url);
-          if (lastUrl) URL.revokeObjectURL(lastUrl);
-          lastUrl = url;
         };
-        img.src = url;
+        img.src = 'data:image/jpeg;base64,' + event.data;
       };
 
       // Store WS so we can close it
