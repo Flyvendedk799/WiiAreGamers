@@ -16,6 +16,8 @@ const wss = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
 // WebSocket Server for zero-latency MJPEG video
 const wssMjpeg = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
 
+const wssIngest = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
+
 server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
     
@@ -23,6 +25,23 @@ server.on('upgrade', (request, socket, head) => {
         wss.handleUpgrade(request, socket, head, (ws) => {
             wss.emit('connection', ws, request);
         });
+    } else if (pathname === '/mjpeg-stream') {
+        wssMjpeg.handleUpgrade(request, socket, head, (ws) => {
+            wssMjpeg.emit('connection', ws, request);
+        });
+    } else if (pathname === '/host-ingest') {
+        wssIngest.handleUpgrade(request, socket, head, (ws) => {
+            ws.on('message', (data) => {
+                // Relay incoming MJPEG frame from local bridge directly to mobile clients
+                wssMjpeg.clients.forEach(client => {
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 150000) {
+                        client.send(data);
+                    }
+                });
+            });
+        });
+    }
+});
     } else if (pathname === '/mjpeg-stream') {
         wssMjpeg.handleUpgrade(request, socket, head, (ws) => {
             wssMjpeg.emit('connection', ws, request);
@@ -43,6 +62,10 @@ const udpSocket = dgram.createSocket('udp4');
 udpSocket.bind(26760, () => console.log('UDP DSU listener on 26760 (For iOS DSUController)'));
 
 app.post('/api/start', (req, res) => {
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('start-game');
+        return res.json({ status: 'started_on_host' });
+    }
     if (emulatorProcess) {
         return res.json({ status: 'already_running' });
     }
