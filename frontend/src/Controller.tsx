@@ -299,7 +299,7 @@ export default function Controller() {
             const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
             const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
 
-            if ((totalAccel > 1.7 || rotMagnitude > 250) && (now - lastSwingTime.current > 450)) {
+            if ((totalAccel > 1.25 || rotMagnitude > 130) && (now - lastSwingTime.current > 450)) {
                 lastSwingTime.current = now;
                 triggerSwing();
             }
