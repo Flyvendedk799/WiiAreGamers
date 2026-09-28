@@ -230,7 +230,7 @@ function App() {
                 width: '100%', 
                 height: 'auto', 
                 display: 'block', 
-                aspectRatio: '16/9', 
+                aspectRatio: '4/3', 
                 cursor: 'pointer',
                 imageRendering: 'crisp-edges'
               }}

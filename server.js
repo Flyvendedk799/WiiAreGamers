@@ -71,7 +71,7 @@ app.post('/api/start', (req, res) => {
     const xvfbProcess = spawn('Xvfb', [
         ':99',
         '-screen', '0',
-        '854x480x24',
+        '512x384x24',
         '-ac'
     ]);
 
@@ -96,11 +96,13 @@ app.post('/api/start', (req, res) => {
             '-C', 'DSP.Backend=Pulse',
             '-C', 'Core.SyncGPU=False',
             '-C', 'Core.SyncOnSkipIdle=True',
-            '-C', 'Wii.Widescreen=True',
+            '-C', 'Wii.Widescreen=False',
             '-C', 'Display.Fullscreen=True',
             '-C', 'Video.EFBScale=1',
             '-C', 'Video.Backend=OGL',
             '-C', 'Video.DisableBBox=True',
+            '-C', 'Video.DisableLighting=True',
+            '-C', 'Video.DisableFog=True',
             '-C', 'Video.EFBAccessEnable=False',
             '-C', 'Video.EFBToTextureEnable=True',
             '-C', 'Video.SafeTextureCacheColorSamples=0'
@@ -109,7 +111,7 @@ app.post('/api/start', (req, res) => {
                 ...process.env,
                 DISPLAY: ':99',
                 XDG_RUNTIME_DIR: '/tmp',
-                LP_NUM_THREADS: '4'
+                LP_NUM_THREADS: '6'
             }
         });
 
@@ -149,12 +151,12 @@ app.post('/api/start', (req, res) => {
             '-analyzeduration', '0',
             '-f', 'x11grab',
             '-draw_mouse', '0',
-            '-video_size', '854x480',
+            '-video_size', '512x384',
             '-framerate', '30',
             '-i', ':99',
             '-f', 'mjpeg',
             '-vcodec', 'mjpeg',
-            '-s', '640x360',
+            '-s', '512x384',
             '-q:v', '5',
             '-threads', '4',
             '-flush_packets', '1',
