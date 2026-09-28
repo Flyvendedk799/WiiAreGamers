@@ -79,6 +79,26 @@ socket.on('start-game', () => {
     const wsUrl = VPS_URL.replace('https', 'wss') + '/host-ingest';
     videoSocket = new WebSocket(wsUrl);
     
+socket.on('stop-game', () => {
+    console.log('Stop Game requested from VPS! Shutting down Dolphin and OBS...');
+    if (dolphinProcess) {
+        dolphinProcess.kill();
+        dolphinProcess = null;
+    }
+    if (ffmpegProcess) {
+        ffmpegProcess.kill();
+        ffmpegProcess = null;
+    }
+    if (videoSocket) {
+        videoSocket.close();
+        videoSocket = null;
+    }
+    // Note: obsProcess is not strictly saved globally in the current script, so we kill it by name
+    require('child_process').exec('taskkill /F /IM obs64.exe', (err) => {
+        if (!err) console.log('OBS closed.');
+    });
+});
+
     videoSocket.on('open', () => {
         console.log('Video ingest socket connected to VPS. Launching FFmpeg & OBS...');
         
