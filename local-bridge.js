@@ -94,7 +94,7 @@ socket.on('stop-game', () => {
         videoSocket = null;
     }
     // Note: obsProcess is not strictly saved globally in the current script, so we kill it by name
-    require('child_process').exec('taskkill /F /IM obs64.exe', (err) => {
+    require('child_process').exec('taskkill /IM obs64.exe', (err) => {
         if (!err) console.log('OBS closed.');
     });
 });
