@@ -65,7 +65,24 @@ function App() {
       
       const img = new Image();
       let isDecoding = false;
-      let pendingFrameData: string | null = null;
+      const frameQueue: string[] = [];
+
+      const processNextFrame = () => {
+        if (frameQueue.length === 0) {
+          isDecoding = false;
+          return;
+        }
+        
+        isDecoding = true;
+        // JITTER BUFFER: If queue exceeds 4 frames (network stalled then dumped a batch),
+        // drop the oldest delayed frames to instantly catch up to real-time.
+        if (frameQueue.length > 4) {
+          frameQueue.splice(0, frameQueue.length - 2);
+        }
+        
+        const data = frameQueue.shift()!;
+        img.src = 'data:image/jpeg;base64,' + data;
+      };
 
       img.onload = () => {
         requestAnimationFrame(() => {
@@ -75,25 +92,15 @@ function App() {
               ctx.drawImage(img, 0, 0, 854, 480);
             }
           }
-          isDecoding = false;
-          // Instantly decode the next pending frame if one arrived while we were drawing
-          if (pendingFrameData) {
-            const data = pendingFrameData;
-            pendingFrameData = null;
-            isDecoding = true;
-            img.src = 'data:image/jpeg;base64,' + data;
-          }
+          processNextFrame();
         });
       };
 
       mjpegWs.onmessage = (event) => {
         if (!canvasRef.current || typeof event.data !== 'string') return;
-        if (isDecoding) {
-          // Drop the old pending frame and replace it with this NEWER one
-          pendingFrameData = event.data;
-        } else {
-          isDecoding = true;
-          img.src = 'data:image/jpeg;base64,' + event.data;
+        frameQueue.push(event.data);
+        if (!isDecoding) {
+          processNextFrame();
         }
       };
 
