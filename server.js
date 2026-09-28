@@ -97,7 +97,9 @@ app.post('/api/start', (req, res) => {
             '-C', 'Core.SyncGPU=False',
             '-C', 'Core.SyncOnSkipIdle=False',
             '-C', 'Wii.Widescreen=True',
-            '-C', 'Display.Fullscreen=True'
+            '-C', 'Display.Fullscreen=True',
+            '-C', 'Video.EFBScale=1',
+            '-C', 'Video.Backend=OGL'
         ], {
             env: {
                 ...process.env,
@@ -120,6 +122,7 @@ app.post('/api/start', (req, res) => {
         // Start FFmpeg to capture video and stereo audio
         const audioProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
+            '-thread_queue_size', '512',
             '-f', 'pulse',
             '-i', 'default',
             '-f', 'mpegts',
@@ -130,6 +133,7 @@ app.post('/api/start', (req, res) => {
             '-b:a', '128k',
             '-muxdelay', '0.001',
             '-flush_packets', '1',
+            '-avioflags', 'direct',
             'pipe:1'
         ], { 
             stdio: ['ignore', 'pipe', 'ignore'],
@@ -140,6 +144,7 @@ app.post('/api/start', (req, res) => {
             '-fflags', 'nobuffer',
             '-probesize', '32',
             '-analyzeduration', '0',
+            '-thread_queue_size', '512',
             '-f', 'x11grab',
             '-draw_mouse', '0',
             '-video_size', '854x480',
@@ -149,8 +154,9 @@ app.post('/api/start', (req, res) => {
             '-vcodec', 'mjpeg',
             '-s', '854x480',
             '-q:v', '5',
-            '-threads', '2',
+            '-threads', '4',
             '-flush_packets', '1',
+            '-avioflags', 'direct',
             '-an',
             'pipe:1'
         ], { stdio: ['ignore', 'pipe', 'ignore'] });
@@ -298,19 +304,19 @@ function executeSwing(slot = 0) {
     setTimeout(() => {
         state.accel = { x: 5.0, y: 1.0, z: 4.0 };
         state.gyro = { pitch: -400, yaw: 600, roll: -600 };
-    }, 60);
+    }, 30);
 
     // 3. Follow-through
     setTimeout(() => {
         state.accel = { x: 1.2, y: -0.8, z: 0.6 };
         state.gyro = { pitch: -50, yaw: 100, roll: -100 };
-    }, 180);
+    }, 120);
 
     // 4. Return to rest (Gravity)
     setTimeout(() => {
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
-    }, 320);
+    }, 250);
 }
 
 app.all('/api/swing', (req, res) => {

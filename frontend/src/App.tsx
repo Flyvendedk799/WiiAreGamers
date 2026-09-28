@@ -228,7 +228,7 @@ function App() {
                 imageRendering: 'crisp-edges'
               }}
             ></canvas>
-            <div id="jsmpeg-hidden" style={{ display: 'none' }}></div>
+            <div id="jsmpeg-hidden" style={{ opacity: 0, position: 'absolute', pointerEvents: 'none', width: '1px', height: '1px' }}></div>
 
             {/* Unmute Game Audio Banner Overlay */}
             {!isAudioEnabled && (
