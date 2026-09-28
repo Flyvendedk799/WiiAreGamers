@@ -152,7 +152,7 @@ app.post('/api/start', (req, res) => {
             '-i', ':99',
             '-f', 'mjpeg',
             '-vcodec', 'mjpeg',
-            '-s', '854x480',
+            '-s', '640x360',
             '-q:v', '5',
             '-threads', '4',
             '-flush_packets', '1',
@@ -197,7 +197,9 @@ app.post('/api/start', (req, res) => {
                 
                 wssMjpeg.clients.forEach(client => {
                     // Send raw binary to avoid Base64 decoding overhead on the mobile client
-                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 400000) {
+                    // CRITICAL: Drop frames aggressively if the network queue exceeds ~150KB (approx 2 frames).
+                    // This prevents TCP/Cloudflare buffer bloat which causes progressive latency over time.
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 150000) {
                         client.send(frame);
                     }
                 });

@@ -66,6 +66,7 @@ function App() {
       
       let latestBitmap: ImageBitmap | null = null;
       let isDrawing = false;
+      let isDecoding = false;
 
       const drawLoop = () => {
         if (latestBitmap && canvasRef.current) {
@@ -80,12 +81,17 @@ function App() {
       mjpegWs.onmessage = async (event) => {
         if (!canvasRef.current || !(event.data instanceof Blob)) return;
         
+        // CRITICAL: Drop frames if the phone's CPU is too slow to decode the current one.
+        // This prevents the promise queue from backing up and causing progressive latency.
+        if (isDecoding) return; 
+        
         try {
+          isDecoding = true;
           // Off-main-thread hardware-accelerated decode
           const bitmap = await createImageBitmap(event.data);
+          isDecoding = false;
           
           if (latestBitmap) {
-            // Drop old undisplayed frame to stay perfectly real-time
             latestBitmap.close(); 
           }
           latestBitmap = bitmap;
@@ -95,6 +101,7 @@ function App() {
             requestAnimationFrame(drawLoop);
           }
         } catch (e) {
+          isDecoding = false;
           console.error("Frame decode error", e);
         }
       };
