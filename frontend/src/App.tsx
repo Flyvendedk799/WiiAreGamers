@@ -190,6 +190,8 @@ function App() {
             <canvas 
               ref={canvasRef} 
               id="video-canvas"
+              width={854}
+              height={480}
               onClick={() => {
                 pressButton('A');
                 if (!isAudioEnabled) unlockAudio();
