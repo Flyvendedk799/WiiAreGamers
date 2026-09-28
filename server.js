@@ -555,6 +555,15 @@ io.on('connection', (socket) => {
         const slot = activePlayers.indexOf(socket.id);
         if (slot !== -1) {
             console.log(`Player ${slot} disconnected`);
+            activePlayers.splice(slot, 1);
+            if (activePlayers.length === 0) {
+                console.log('All players disconnected. Stopping game.');
+                if (remoteHostSocket) {
+                    remoteHostSocket.emit('stop-game');
+                }
+                isRunning = false;
+                io.emit('game-stopped');
+            }
         }
     });
 });
