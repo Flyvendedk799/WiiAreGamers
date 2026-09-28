@@ -120,19 +120,10 @@ app.post('/api/start', (req, res) => {
         // Start FFmpeg to capture video and stereo audio
         // Output 1 (pipe:1): MPEG-TS Audio-only stream to JSMpeg
         // Output 2 (pipe:3): MJPEG Video-only stream to Custom Canvas Player
-        streamProcess = spawn('ffmpeg', [
+        const audioProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
-            '-probesize', '32',
-            '-analyzeduration', '0',
-            '-f', 'x11grab',
-            '-draw_mouse', '0',
-            '-video_size', '854x480',
-            '-framerate', '30',
-            '-i', ':99',
             '-f', 'pulse',
             '-i', 'default',
-            
-            // Audio Output (MPEG-TS)
             '-f', 'mpegts',
             '-vn',
             '-codec:a', 'mp2',
@@ -141,22 +132,36 @@ app.post('/api/start', (req, res) => {
             '-b:a', '128k',
             '-muxdelay', '0.001',
             '-flush_packets', '1',
-            'pipe:1',
-            
-            // Video Output (MJPEG)
-            '-f', 'image2pipe',
-            '-vcodec', 'mjpeg',
-            '-s', '640x360', // Reduced to prevent Cloudflare WebSocket bandwidth throttling
-            '-q:v', '6', // Decent quality, small file size
-            '-threads', '2', // Explicitly multi-thread JPEG encoding for lowest latency
-            '-an',
-            'pipe:3'
-        ], {
-            stdio: ['ignore', 'pipe', 'pipe', 'pipe']
-        });
+            'pipe:1'
+        ], { stdio: ['ignore', 'pipe', 'ignore'] });
 
-        streamProcess.stdout.on('data', (data) => {
-            // Broadcast audio binary data to connected websocket clients
+        const videoProcess = spawn('ffmpeg', [
+            '-fflags', 'nobuffer',
+            '-probesize', '32',
+            '-analyzeduration', '0',
+            '-f', 'x11grab',
+            '-draw_mouse', '0',
+            '-video_size', '854x480',
+            '-framerate', '30',
+            '-i', ':99',
+            '-f', 'mjpeg',
+            '-vcodec', 'mjpeg',
+            '-s', '640x360',
+            '-q:v', '6',
+            '-threads', '2',
+            '-flush_packets', '1',
+            '-an',
+            'pipe:1'
+        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+
+        streamProcess = {
+            kill: () => {
+                audioProcess.kill();
+                videoProcess.kill();
+            }
+        };
+
+        audioProcess.stdout.on('data', (data) => {
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(data);
@@ -165,7 +170,7 @@ app.post('/api/start', (req, res) => {
         });
 
         let mjpegBuffer = Buffer.alloc(0);
-        streamProcess.stdio[3].on('data', (data) => {
+        videoProcess.stdout.on('data', (data) => {
             mjpegBuffer = Buffer.concat([mjpegBuffer, data]);
             
             // Safety limit to prevent OOM if stream gets corrupted
@@ -195,7 +200,7 @@ app.post('/api/start', (req, res) => {
             }
         });
 
-        streamProcess.stderr.on('data', (data) => {
+        videoProcess.stderr?.on('data', (data) => {
             // console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
         });
     }, 600);
