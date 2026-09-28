@@ -43,11 +43,11 @@ function App() {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const videoUrl = `${wsProtocol}//${window.location.host}/video-stream`;
       // Setup Audio Stream via JSMpeg (Video Disabled)
+      // We render it into a hidden div so it doesn't steal the WebGL/2D context of our main canvas
       playerRef.current = new JSMpeg.VideoElement(
-        '#video-wrapper', // JSMpeg needs a wrapper, but it won't draw video
+        '#jsmpeg-hidden',
         videoUrl,
         {
-          canvas: canvasRef.current,
           autoplay: true,
           loop: false,
           control: false,
@@ -204,6 +204,7 @@ function App() {
                 imageRendering: 'crisp-edges'
               }}
             ></canvas>
+            <div id="jsmpeg-hidden" style={{ display: 'none' }}></div>
 
             {/* Unmute Game Audio Banner Overlay */}
             {!isAudioEnabled && (
