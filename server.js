@@ -111,23 +111,25 @@ app.post('/api/start', (req, res) => {
             xvfbProcess.kill();
         });
 
-        // Start FFmpeg to capture video and stereo audio — 30fps capture to minimize CPU overhead
-        // (Dolphin renders internally at 60fps; 30fps stream is plenty for web viewing and saves ~40% CPU)
+        // Start FFmpeg to capture video and stereo audio
+        // Stream at 640x360, 30fps, 800k to ensure JSMpeg can decode it in JavaScript without falling behind
         streamProcess = spawn('ffmpeg', [
+            '-fflags', 'nobuffer',
             '-f', 'x11grab',
             '-thread_queue_size', '512',
-            '-video_size', '854x480',
+            '-video_size', '854x480', // Capture at native Dolphin res
             '-framerate', '30',
             '-i', ':99',
             '-f', 'pulse',
             '-thread_queue_size', '512',
             '-i', 'default',
             '-f', 'mpegts',
+            '-flags', 'low_delay',
             '-codec:v', 'mpeg1video',
-            '-s', '854x480',
-            '-b:v', '1800k',
-            '-maxrate', '2200k',
-            '-bufsize', '800k',
+            '-s', '640x360',          // Downscale to 360p for the JS decoder
+            '-b:v', '800k',
+            '-maxrate', '1200k',
+            '-bufsize', '400k',
             '-bf', '0',
             '-g', '15',
             '-qmin', '2',
