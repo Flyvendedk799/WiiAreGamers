@@ -95,7 +95,7 @@ app.post('/api/start', (req, res) => {
             '-C', 'DSP.DSPThread=True',
             '-C', 'DSP.Backend=Pulse',
             '-C', 'Core.SyncGPU=False',
-            '-C', 'Core.SyncOnSkipIdle=True',
+            '-C', 'Core.SyncOnSkipIdle=False',
             '-C', 'Wii.Widescreen=True',
             '-C', 'Display.Fullscreen=True'
         ], {
@@ -103,7 +103,7 @@ app.post('/api/start', (req, res) => {
                 ...process.env,
                 DISPLAY: ':99',
                 XDG_RUNTIME_DIR: '/tmp',
-                LP_NUM_THREADS: '5'
+                LP_NUM_THREADS: '7'
             }
         });
 
@@ -118,8 +118,6 @@ app.post('/api/start', (req, res) => {
         });
 
         // Start FFmpeg to capture video and stereo audio
-        // Output 1 (pipe:1): MPEG-TS Audio-only stream to JSMpeg
-        // Output 2 (pipe:3): MJPEG Video-only stream to Custom Canvas Player
         const audioProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
             '-f', 'pulse',
@@ -127,13 +125,16 @@ app.post('/api/start', (req, res) => {
             '-f', 'mpegts',
             '-vn',
             '-codec:a', 'mp2',
-            '-ar', '44100',
+            '-ar', '48000',
             '-ac', '2',
             '-b:a', '128k',
             '-muxdelay', '0.001',
             '-flush_packets', '1',
             'pipe:1'
-        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+        ], { 
+            stdio: ['ignore', 'pipe', 'ignore'],
+            env: { ...process.env, PULSE_LATENCY_MSEC: '30' } 
+        });
 
         const videoProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
@@ -146,8 +147,8 @@ app.post('/api/start', (req, res) => {
             '-i', ':99',
             '-f', 'mjpeg',
             '-vcodec', 'mjpeg',
-            '-s', '640x360',
-            '-q:v', '6',
+            '-s', '854x480',
+            '-q:v', '5',
             '-threads', '2',
             '-flush_packets', '1',
             '-an',
