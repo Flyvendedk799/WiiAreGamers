@@ -298,9 +298,9 @@ function executeSwing(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
     
-    // 1. Windup / Backswing (crucial for Wii Sports to detect a full stroke)
-    state.accel = { x: -1.0, y: 0.0, z: -1.5 };
-    state.gyro = { pitch: 100, yaw: -100, roll: 0 };
+    // 1. Powerful forward strike (No windup, which previously caused accidental ball tosses)
+    state.accel = { x: 5.0, y: 1.0, z: 4.0 };
+    state.gyro = { pitch: -400, yaw: 600, roll: -600 };
     
     // Force immediate UDP packet
     for (const [key, client] of dolphinSubscribers.entries()) {
@@ -310,13 +310,7 @@ function executeSwing(slot = 0) {
         }
     }
 
-    // 2. Powerful forward strike
-    setTimeout(() => {
-        state.accel = { x: 5.0, y: 1.0, z: 4.0 };
-        state.gyro = { pitch: -400, yaw: 600, roll: -600 };
-    }, 30);
-
-    // 3. Follow-through
+    // 2. Follow-through
     setTimeout(() => {
         state.accel = { x: 1.2, y: -0.8, z: 0.6 };
         state.gyro = { pitch: -50, yaw: 100, roll: -100 };
