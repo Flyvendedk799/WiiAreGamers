@@ -6,8 +6,8 @@ const { DSUPacker } = require('./dsu-packer');
 
 // CONFIGURATION:
 const VPS_URL = 'https://wii.mast3kmedia.dk';
-const DOLPHIN_PATH = 'C:\\Program Files\\Dolphin\\Dolphin.exe'; 
-const ROM_PATH = 'game.wbfs';
+const DOLPHIN_PATH = require('path').join(__dirname, 'Dolphin', 'Dolphin-x64', 'Dolphin.exe'); 
+const ROM_PATH = require('path').join(__dirname, 'game.wbfs');
 
 console.log('Connecting to WiiAreGamers VPS...');
 const socket = io(VPS_URL);
@@ -82,11 +82,12 @@ socket.on('start-game', () => {
     videoSocket.on('open', () => {
         console.log('Video ingest socket connected to VPS. Launching FFmpeg...');
         
-        // 3. Launch FFmpeg to secretly screen-record the Dolphin window and pipe it to WebSocket
-        ffmpegProcess = spawn('ffmpeg', [
+        // 3. Launch FFmpeg to secretly screen-record the desktop and pipe it to WebSocket
+        const ffmpegPath = 'C:\\Users\\tobia\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffmpeg.exe';
+        ffmpegProcess = spawn(ffmpegPath, [
             '-f', 'gdigrab',
             '-framerate', '30',
-            '-i', 'title=Dolphin', // Captures any window starting with Dolphin
+            '-i', 'desktop', // Captures the full desktop to avoid DWM hardware acceleration black-screen issues
             '-f', 'image2pipe',
             '-vcodec', 'mjpeg',
             '-q:v', '3', // Quality setting (lower is better, 3 is good balance)
