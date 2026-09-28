@@ -100,8 +100,6 @@ app.post('/api/start', (req, res) => {
             '-C', 'Display.Fullscreen=True',
             '-C', 'Video.EFBScale=1',
             '-C', 'Video.Backend=Vulkan',
-            '-C', 'Core.OverclockEnable=True',
-            '-C', 'Core.Overclock=0.5',
             '-C', 'Video.DisableBBox=True',
             '-C', 'Video.EFBAccessEnable=False',
             '-C', 'Video.EFBToTextureEnable=True',
@@ -111,7 +109,7 @@ app.post('/api/start', (req, res) => {
                 ...process.env,
                 DISPLAY: ':99',
                 XDG_RUNTIME_DIR: '/tmp',
-                LP_NUM_THREADS: '7'
+                LP_NUM_THREADS: '4'
             }
         });
 
@@ -141,7 +139,7 @@ app.post('/api/start', (req, res) => {
             '-avioflags', 'direct',
             'pipe:1'
         ], { 
-            stdio: ['ignore', 'pipe', 'ignore'],
+            stdio: ['ignore', 'pipe', 'pipe'],
             env: { ...process.env, PULSE_LATENCY_MSEC: '30' } 
         });
 
@@ -163,7 +161,7 @@ app.post('/api/start', (req, res) => {
             '-avioflags', 'direct',
             '-an',
             'pipe:1'
-        ], { stdio: ['ignore', 'pipe', 'ignore'] });
+        ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
         streamProcess = {
             kill: () => {
@@ -214,7 +212,11 @@ app.post('/api/start', (req, res) => {
         });
 
         videoProcess.stderr?.on('data', (data) => {
-            // console.error(`FFMPEG: ${data}`); // Uncomment to debug ffmpeg
+            console.error(`FFMPEG VIDEO: ${data}`);
+        });
+
+        audioProcess.stderr?.on('data', (data) => {
+            console.error(`FFMPEG AUDIO: ${data}`);
         });
     }, 600);
 
