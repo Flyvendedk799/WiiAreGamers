@@ -124,7 +124,6 @@ app.post('/api/start', (req, res) => {
             '-thread_queue_size', '512',
             '-i', 'default',
             '-f', 'mpegts',
-            '-flags', 'low_delay',
             '-codec:v', 'mpeg1video',
             '-s', '640x360',          // Downscale to 360p for the JS decoder
             '-b:v', '800k',
