@@ -147,7 +147,7 @@ app.post('/api/start', (req, res) => {
             // Video Output (MJPEG)
             '-f', 'image2pipe',
             '-vcodec', 'mjpeg',
-            '-s', '640x360',
+            '-s', '854x480', // Native Wii Widescreen resolution!
             '-q:v', '4', // High quality, zero latency drop logic handles bandwidth spikes
             '-threads', '2', // Explicitly multi-thread JPEG encoding for lowest latency
             '-an',
@@ -185,8 +185,8 @@ app.post('/api/start', (req, res) => {
                 mjpegBuffer = Buffer.from(mjpegBuffer.subarray(end + 2));
                 
                 wssMjpeg.clients.forEach(client => {
-                    // Send if buffer is small (< 100KB, about 3-5 frames)
-                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 100000) {
+                    // Send if buffer is small (< 200KB, about 2-3 high quality frames)
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 200000) {
                         client.send(frame.toString('base64'));
                     }
                 });
