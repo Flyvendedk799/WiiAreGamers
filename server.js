@@ -42,14 +42,7 @@ server.on('upgrade', (request, socket, head) => {
         });
     }
 });
-    } else if (pathname === '/mjpeg-stream') {
-        wssMjpeg.handleUpgrade(request, socket, head, (ws) => {
-            wssMjpeg.emit('connection', ws, request);
-        });
-    }
-    // Socket.io automatically intercepts its own path (/socket.io/)
-    // so we just leave it alone.
-});
+
 
 app.use(express.static(path.join(__dirname, 'frontend/dist')));
 app.use(express.json());
