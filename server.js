@@ -13,6 +13,8 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 // Raw WebSocket Server for JSMPEG Video Streaming (noServer so we can manually route upgrades)
 const wss = new WebSocket.Server({ noServer: true });
+// WebSocket Server for zero-latency MJPEG video
+const wssMjpeg = new WebSocket.Server({ noServer: true });
 
 server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
@@ -20,6 +22,10 @@ server.on('upgrade', (request, socket, head) => {
     if (pathname === '/video-stream') {
         wss.handleUpgrade(request, socket, head, (ws) => {
             wss.emit('connection', ws, request);
+        });
+    } else if (pathname === '/mjpeg-stream') {
+        wssMjpeg.handleUpgrade(request, socket, head, (ws) => {
+            wssMjpeg.emit('connection', ws, request);
         });
     }
     // Socket.io automatically intercepts its own path (/socket.io/)
@@ -112,43 +118,68 @@ app.post('/api/start', (req, res) => {
         });
 
         // Start FFmpeg to capture video and stereo audio
-        // Stream at 640x360, 30fps, 800k to ensure JSMpeg can decode it in JavaScript without falling behind
+        // Output 1 (pipe:1): MPEG-TS Audio-only stream to JSMpeg
+        // Output 2 (pipe:3): MJPEG Video-only stream to Custom Canvas Player
         streamProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
             '-f', 'x11grab',
             '-thread_queue_size', '512',
-            '-video_size', '854x480', // Capture at native Dolphin res
+            '-video_size', '854x480',
             '-framerate', '30',
             '-i', ':99',
             '-f', 'pulse',
             '-thread_queue_size', '512',
             '-i', 'default',
+            
+            // Audio Output
             '-f', 'mpegts',
-            '-codec:v', 'mpeg1video',
-            '-s', '640x360',          // Downscale to 360p for the JS decoder
-            '-b:v', '800k',
-            '-maxrate', '1200k',
-            '-bufsize', '400k',
-            '-bf', '0',
-            '-g', '15',
-            '-qmin', '2',
-            '-qmax', '8',
-            '-threads', '2',
-            '-muxdelay', '0.001',
+            '-vn', // No video
             '-codec:a', 'mp2',
             '-ar', '44100',
             '-ac', '2',
             '-b:a', '128k',
-            '-'
-        ]);
+            'pipe:1',
+            
+            // Video Output
+            '-f', 'image2pipe',
+            '-vcodec', 'mjpeg',
+            '-s', '640x360',
+            '-q:v', '6', // Decent quality, low bitrate
+            '-an', // No audio
+            'pipe:3'
+        ], {
+            stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+        });
 
         streamProcess.stdout.on('data', (data) => {
-            // Broadcast raw video binary data to connected websocket clients
+            // Broadcast audio binary data to connected websocket clients
             wss.clients.forEach((client) => {
                 if (client.readyState === WebSocket.OPEN) {
                     client.send(data);
                 }
             });
+        });
+
+        let mjpegBuffer = Buffer.alloc(0);
+        streamProcess.stdio[3].on('data', (data) => {
+            mjpegBuffer = Buffer.concat([mjpegBuffer, data]);
+            let start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
+            let end = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD9]), start);
+            
+            while (start !== -1 && end !== -1) {
+                let frame = mjpegBuffer.slice(start, end + 2);
+                mjpegBuffer = mjpegBuffer.slice(end + 2);
+                
+                wssMjpeg.clients.forEach(client => {
+                    // Absolute Zero Latency Check: Drop frame if websocket is still sending previous frame!
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount === 0) {
+                        client.send(frame);
+                    }
+                });
+                
+                start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
+                end = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD9]), start);
+            }
         });
 
         streamProcess.stderr.on('data', (data) => {

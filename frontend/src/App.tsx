@@ -42,26 +42,56 @@ function App() {
     if (isPlaying && canvasRef.current && !playerRef.current) {
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const videoUrl = `${wsProtocol}//${window.location.host}/video-stream`;
-      
+      // Setup Audio Stream via JSMpeg (Video Disabled)
       playerRef.current = new JSMpeg.VideoElement(
-        '#video-wrapper',
+        '#video-wrapper', // JSMpeg needs a wrapper, but it won't draw video
         videoUrl,
         {
           canvas: canvasRef.current,
           autoplay: true,
           loop: false,
-          control: false
+          control: false,
+          video: false // Disable JSMpeg's slow Javascript video decoder!
         },
         {
           audio: true,
-          videoBufferSize: 512 * 1024,
           audioBufferSize: 128 * 1024
         }
       );
+
+      // Setup Zero-Latency Video Stream via MJPEG
+      const mjpegUrl = `${wsProtocol}//${window.location.host}/mjpeg-stream`;
+      const mjpegWs = new WebSocket(mjpegUrl);
+      mjpegWs.binaryType = 'blob';
+      
+      let lastUrl = '';
+      mjpegWs.onmessage = (event) => {
+        if (!canvasRef.current) return;
+        const url = URL.createObjectURL(event.data);
+        const img = new Image();
+        img.onload = () => {
+          if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
+            }
+          }
+          URL.revokeObjectURL(url);
+          if (lastUrl) URL.revokeObjectURL(lastUrl);
+          lastUrl = url;
+        };
+        img.src = url;
+      };
+
+      // Store WS so we can close it
+      (playerRef.current as any).mjpegWs = mjpegWs;
     }
     
     return () => {
       if (playerRef.current) {
+        if ((playerRef.current as any).mjpegWs) {
+          (playerRef.current as any).mjpegWs.close();
+        }
         playerRef.current.destroy();
         playerRef.current = null;
       }
