@@ -246,13 +246,13 @@ export default function Controller() {
             if (now - lastSwingTime.current < 380) return; // mid-swing freeze
 
             let reachX = 16.0;
-            let reachY = 12.0;
+            let reachY = 9.0;
             if (sensitivity === 'fast') {
                 reachX = 10.0;
-                reachY = 8.0;
+                reachY = 5.6;
             } else if (sensitivity === 'smooth') {
                 reachX = 22.0;
-                reachY = 17.0;
+                reachY = 12.3;
             }
 
             const diffYaw = ((yaw - (baseYaw.current ?? yaw) + 540) % 360) - 180;
