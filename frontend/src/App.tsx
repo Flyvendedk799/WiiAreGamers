@@ -62,45 +62,40 @@ function App() {
       // Setup Zero-Latency Video Stream via MJPEG
       const mjpegUrl = `${wsProtocol}//${window.location.host}/mjpeg-stream`;
       const mjpegWs = new WebSocket(mjpegUrl);
+      mjpegWs.binaryType = 'blob';
       
-      const img = new Image();
-      let isDecoding = false;
-      const frameQueue: string[] = [];
+      let latestBitmap: ImageBitmap | null = null;
+      let isDrawing = false;
 
-      const processNextFrame = () => {
-        if (frameQueue.length === 0) {
-          isDecoding = false;
-          return;
+      const drawLoop = () => {
+        if (latestBitmap && canvasRef.current) {
+          const ctx = canvasRef.current.getContext('2d', { alpha: false });
+          if (ctx) ctx.drawImage(latestBitmap, 0, 0, 854, 480);
+          latestBitmap.close(); // Free memory immediately
+          latestBitmap = null;
         }
-        
-        isDecoding = true;
-        // JITTER BUFFER: If queue exceeds 4 frames (network stalled then dumped a batch),
-        // drop the oldest delayed frames to instantly catch up to real-time.
-        if (frameQueue.length > 4) {
-          frameQueue.splice(0, frameQueue.length - 2);
-        }
-        
-        const data = frameQueue.shift()!;
-        img.src = 'data:image/jpeg;base64,' + data;
+        isDrawing = false;
       };
 
-      img.onload = () => {
-        requestAnimationFrame(() => {
-          if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d', { alpha: false });
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, 854, 480);
-            }
+      mjpegWs.onmessage = async (event) => {
+        if (!canvasRef.current || !(event.data instanceof Blob)) return;
+        
+        try {
+          // Off-main-thread hardware-accelerated decode
+          const bitmap = await createImageBitmap(event.data);
+          
+          if (latestBitmap) {
+            // Drop old undisplayed frame to stay perfectly real-time
+            latestBitmap.close(); 
           }
-          processNextFrame();
-        });
-      };
-
-      mjpegWs.onmessage = (event) => {
-        if (!canvasRef.current || typeof event.data !== 'string') return;
-        frameQueue.push(event.data);
-        if (!isDecoding) {
-          processNextFrame();
+          latestBitmap = bitmap;
+          
+          if (!isDrawing) {
+            isDrawing = true;
+            requestAnimationFrame(drawLoop);
+          }
+        } catch (e) {
+          console.error("Frame decode error", e);
         }
       };
 

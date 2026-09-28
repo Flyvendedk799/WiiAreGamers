@@ -127,7 +127,7 @@ app.post('/api/start', (req, res) => {
             '-f', 'x11grab',
             '-draw_mouse', '0',
             '-video_size', '854x480',
-            '-framerate', '60',
+            '-framerate', '30',
             '-i', ':99',
             '-f', 'pulse',
             '-i', 'default',
@@ -146,8 +146,8 @@ app.post('/api/start', (req, res) => {
             // Video Output (MJPEG)
             '-f', 'image2pipe',
             '-vcodec', 'mjpeg',
-            '-s', '854x480', // Native Wii Widescreen resolution!
-            '-q:v', '5', // Balanced quality for 60 FPS
+            '-s', '640x360', // Reduced to prevent Cloudflare WebSocket bandwidth throttling
+            '-q:v', '6', // Decent quality, small file size
             '-threads', '2', // Explicitly multi-thread JPEG encoding for lowest latency
             '-an',
             'pipe:3'
@@ -184,9 +184,9 @@ app.post('/api/start', (req, res) => {
                 mjpegBuffer = Buffer.from(mjpegBuffer.subarray(end + 2));
                 
                 wssMjpeg.clients.forEach(client => {
-                    // Send if buffer is small (< 800KB, about 8 frames of jitter allowance)
-                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 800000) {
-                        client.send(frame.toString('base64'));
+                    // Send raw binary to avoid Base64 decoding overhead on the mobile client
+                    if (client.readyState === WebSocket.OPEN && client.bufferedAmount < 400000) {
+                        client.send(frame);
                     }
                 });
                 
