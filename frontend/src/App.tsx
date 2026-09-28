@@ -26,6 +26,7 @@ function App() {
 
   useEffect(() => {
     socket.on('party-created', (code) => setPartyCode(code));
+    socket.on('game-stopped', () => { setIsPlaying(false); setPartyCode(null); });
     socket.on('player-joined', (slot) => {
       setPlayers(prev => prev.includes(slot) ? prev : [...prev, slot]);
     });
