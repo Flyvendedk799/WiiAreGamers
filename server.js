@@ -246,6 +246,11 @@ app.get('/api/debug-dsu', (req, res) => {
 });
 
 app.post('/api/press-ab', (req, res) => {
+    const slot = req.query.slot ? parseInt(req.query.slot) : 0;
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('remote-action', { action: 'press-ab', slot });
+        return res.json({ status: 'relayed', slot });
+    }
     const slot = 0;
     const state = controllerStates[slot];
     state.buttons['A'] = true;
@@ -270,6 +275,12 @@ app.get('/api/status', (req, res) => {
 });
 
 app.all('/api/press-button', (req, res) => {
+    const btn = req.query.btn || req.body?.btn || 'A';
+    const slot = req.query.slot ? parseInt(req.query.slot) : 0;
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('remote-action', { action: 'press-button', btn, slot });
+        return res.json({ status: 'relayed', btn, slot });
+    }
     const btn = req.query.btn || req.body?.btn || 'A';
     const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     const duration = parseInt(req.query.duration ?? req.body?.duration ?? 300);
@@ -330,6 +341,11 @@ function executeSwing(slot = 0) {
 }
 
 app.all('/api/swing', (req, res) => {
+    const slot = req.query.slot ? parseInt(req.query.slot) : 0;
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('remote-action', { action: 'swing', slot });
+        return res.json({ status: 'relayed', slot });
+    }
     const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     executeSwing(slot);
     res.json({ status: 'swung', slot });
@@ -430,9 +446,23 @@ setInterval(() => {
     }
 }, 16);
 
+let remoteHostSocket = null;
+
 // Handle WebSocket controller inputs from our custom mobile web UI
 io.on('connection', (socket) => {
     console.log('Client connected via Socket.io:', socket.id);
+
+    // Host bridge registration (for playing locally on PC)
+    socket.on('register-host', (secret) => {
+        remoteHostSocket = socket;
+        console.log('Remote Bridge Host connected! Switching to Relay Mode.');
+        socket.on('disconnect', () => {
+            if (remoteHostSocket === socket) {
+                remoteHostSocket = null;
+                console.log('Remote Bridge Host disconnected. Reverting to VPS mode.');
+            }
+        });
+    });
 
     // Host creates a party
     socket.on('create-party', () => {
@@ -466,6 +496,11 @@ io.on('connection', (socket) => {
         let slot = activePlayers.indexOf(socket.id);
         if (slot === -1) slot = 0; // Default to player 1
 
+        if (remoteHostSocket) {
+            remoteHostSocket.emit('remote-input', { slot, data });
+            return;
+        }
+
         const state = controllerStates[slot];
         if (!state) return;
         if (data.type === 'motion') {
@@ -496,7 +531,12 @@ io.on('connection', (socket) => {
     socket.on('swing', () => {
         let slot = activePlayers.indexOf(socket.id);
         if (slot === -1) slot = 0;
-        executeSwing(slot);
+        
+        if (remoteHostSocket) {
+            remoteHostSocket.emit('remote-action', { action: 'swing', slot });
+        } else {
+            executeSwing(slot);
+        }
     });
 
     socket.on('disconnect', () => {
