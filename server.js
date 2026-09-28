@@ -99,7 +99,13 @@ app.post('/api/start', (req, res) => {
             '-C', 'Wii.Widescreen=True',
             '-C', 'Display.Fullscreen=True',
             '-C', 'Video.EFBScale=1',
-            '-C', 'Video.Backend=OGL'
+            '-C', 'Video.Backend=Vulkan',
+            '-C', 'Core.OverclockEnable=True',
+            '-C', 'Core.Overclock=0.5',
+            '-C', 'Video.DisableBBox=True',
+            '-C', 'Video.EFBAccessEnable=False',
+            '-C', 'Video.EFBToTextureEnable=True',
+            '-C', 'Video.SafeTextureCacheColorSamples=0'
         ], {
             env: {
                 ...process.env,
@@ -122,7 +128,6 @@ app.post('/api/start', (req, res) => {
         // Start FFmpeg to capture video and stereo audio
         const audioProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
-            '-thread_queue_size', '512',
             '-f', 'pulse',
             '-i', 'default',
             '-f', 'mpegts',
@@ -144,7 +149,6 @@ app.post('/api/start', (req, res) => {
             '-fflags', 'nobuffer',
             '-probesize', '32',
             '-analyzeduration', '0',
-            '-thread_queue_size', '512',
             '-f', 'x11grab',
             '-draw_mouse', '0',
             '-video_size', '854x480',
