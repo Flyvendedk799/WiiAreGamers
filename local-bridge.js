@@ -104,6 +104,7 @@ socket.on('stop-game', () => {
         
         // 3. Launch OBS Studio automatically (Minimizes to tray, starts virtual camera)
         const obsProcess = spawn('C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe', [
+            '--disable-shutdown-check',
             '--startvirtualcam',
             '--minimize-to-tray'
         ], { cwd: 'C:\\Program Files\\obs-studio\\bin\\64bit' });
@@ -155,6 +156,7 @@ socket.on('remote-input', ({ slot, data }) => {
     const state = controllerStates[slot];
     if (!state) return;
     
+    if (data.type === 'button') console.log('[Phone] Player ' + slot + ' pressed: ' + data.btn);
     if (data.type === 'button') {
         state.buttons[data.btn] = data.state;
     } else if (data.type === 'motion') {
@@ -171,6 +173,7 @@ socket.on('remote-action', (msg) => {
     const state = controllerStates[slot];
     if (!state) return;
 
+    console.log('[Phone] Player ' + slot + ' triggered action: ' + msg.action);
     if (msg.action === 'swing') {
         executeSwing(slot);
     } else if (msg.action === 'press-button') {
