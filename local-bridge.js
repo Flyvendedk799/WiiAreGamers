@@ -85,7 +85,6 @@ socket.on('start-game', () => {
         // 3. Launch OBS Studio automatically (Minimizes to tray, starts virtual camera)
         const obsProcess = spawn('C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe', [
             '--startvirtualcam',
-            '--collection', 'DolphinCapture',
             '--minimize-to-tray'
         ], { cwd: 'C:\\Program Files\\obs-studio\\bin\\64bit' });
 
