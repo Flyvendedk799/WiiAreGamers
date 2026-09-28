@@ -80,14 +80,25 @@ socket.on('start-game', () => {
     videoSocket = new WebSocket(wsUrl);
     
     videoSocket.on('open', () => {
-        console.log('Video ingest socket connected to VPS. Launching FFmpeg...');
+        console.log('Video ingest socket connected to VPS. Launching FFmpeg & OBS...');
         
-        // 3. Launch FFmpeg to secretly screen-record the desktop and pipe it to WebSocket
+        // 3. Launch OBS Studio automatically (Minimizes to tray, starts virtual camera)
+        const obsProcess = spawn('C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe', [
+            '--startvirtualcam',
+            '--collection', 'DolphinCapture',
+            '--minimize-to-tray'
+        ], { cwd: 'C:\\Program Files\\obs-studio\\bin\\64bit' });
+
+        obsProcess.on('close', () => {
+            console.log('OBS closed.');
+        });
+
+        // 4. Launch FFmpeg to secretly screen-record the OBS Virtual Camera and pipe it to WebSocket
         const ffmpegPath = 'C:\\Users\\tobia\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-9.0.2-full_build\\bin\\ffmpeg.exe';
         ffmpegProcess = spawn(ffmpegPath, [
-            '-f', 'gdigrab',
-            '-framerate', '30',
-            '-i', 'desktop', // Captures the full desktop to avoid DWM hardware acceleration black-screen issues
+            '-f', 'dshow',
+            '-i', 'video=OBS Virtual Camera', // Captures the OBS Virtual Camera feed
+            '-vf', 'scale=854:-1', // Instantly scale down to 480p to eliminate MJPEG encoder latency
             '-f', 'image2pipe',
             '-vcodec', 'mjpeg',
             '-q:v', '3', // Quality setting (lower is better, 3 is good balance)
