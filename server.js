@@ -161,16 +161,23 @@ app.post('/api/start', (req, res) => {
         });
 
         let mjpegBuffer = Buffer.alloc(0);
-        let frameCount = 0;
         streamProcess.stdio[3].on('data', (data) => {
             mjpegBuffer = Buffer.concat([mjpegBuffer, data]);
+            
+            // Safety limit to prevent OOM if stream gets corrupted
+            if (mjpegBuffer.length > 5000000) {
+                console.error('MJPEG buffer too large, clearing to prevent OOM');
+                mjpegBuffer = Buffer.alloc(0);
+                return;
+            }
+
             let start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
             let end = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD9]), start);
             
             while (start !== -1 && end !== -1) {
-                let frame = mjpegBuffer.slice(start, end + 2);
-                mjpegBuffer = mjpegBuffer.slice(end + 2);
-                frameCount++;
+                let frame = mjpegBuffer.subarray(start, end + 2);
+                // Create a completely new buffer for the remainder so the old slab can be garbage collected
+                mjpegBuffer = Buffer.from(mjpegBuffer.subarray(end + 2));
                 
                 wssMjpeg.clients.forEach(client => {
                     // Send if buffer is small (< 100KB, about 3-5 frames)
@@ -178,10 +185,6 @@ app.post('/api/start', (req, res) => {
                         client.send(frame.toString('base64'));
                     }
                 });
-                
-                if (frameCount % 100 === 0 && wssMjpeg.clients.size > 0) {
-                    console.log(`Sent 100 MJPEG frames. Clients: ${wssMjpeg.clients.size}`);
-                }
                 
                 start = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD8]));
                 end = mjpegBuffer.indexOf(Buffer.from([0xFF, 0xD9]), start);
