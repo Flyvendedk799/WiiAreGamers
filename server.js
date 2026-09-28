@@ -267,7 +267,6 @@ app.post('/api/press-ab', (req, res) => {
         remoteHostSocket.emit('remote-action', { action: 'press-ab', slot });
         return res.json({ status: 'relayed', slot });
     }
-    const slot = 0;
     const state = controllerStates[slot];
     state.buttons['A'] = true;
     state.buttons['B'] = true;
@@ -297,8 +296,6 @@ app.all('/api/press-button', (req, res) => {
         remoteHostSocket.emit('remote-action', { action: 'press-button', btn, slot });
         return res.json({ status: 'relayed', btn, slot });
     }
-    const btn = req.query.btn || req.body?.btn || 'A';
-    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     const duration = parseInt(req.query.duration ?? req.body?.duration ?? 300);
     const state = controllerStates[slot];
     if (state) {
@@ -362,7 +359,6 @@ app.all('/api/swing', (req, res) => {
         remoteHostSocket.emit('remote-action', { action: 'swing', slot });
         return res.json({ status: 'relayed', slot });
     }
-    const slot = parseInt(req.query.slot ?? req.body?.slot ?? 0);
     executeSwing(slot);
     res.json({ status: 'swung', slot });
 });
