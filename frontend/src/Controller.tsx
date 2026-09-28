@@ -175,6 +175,7 @@ export default function Controller() {
     };
 
     const triggerSwing = () => {
+        lastSwingTime.current = Date.now();
         playHapticThump(40, 0.12);
         try { if (navigator.vibrate) navigator.vibrate([40, 20, 60]); } catch (e) {}
         setSwingEffect(true);

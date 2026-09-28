@@ -281,12 +281,11 @@ function executeSwing(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
     
-    // 1. Immediate Powerful forward stroke
-    state.buttons['R1'] = true;
-    state.accel = { x: 5.0, y: 1.0, z: 4.0 };
-    state.gyro = { pitch: -400, yaw: 600, roll: -600 };
+    // 1. Windup / Backswing (crucial for Wii Sports to detect a full stroke)
+    state.accel = { x: -1.0, y: 0.0, z: -1.5 };
+    state.gyro = { pitch: 100, yaw: -100, roll: 0 };
     
-    // Force immediate UDP packet so the emulator feels it instantly without waiting for the 16ms loop
+    // Force immediate UDP packet
     for (const [key, client] of dolphinSubscribers.entries()) {
         if (client.padId === undefined || client.padId === slot) {
             const dsuPacket = dsu.createControllerPacket(state, slot);
@@ -294,19 +293,23 @@ function executeSwing(slot = 0) {
         }
     }
 
-    // 2. Follow-through & release shake
+    // 2. Powerful forward strike
     setTimeout(() => {
-        state.buttons['R1'] = false;
+        state.accel = { x: 5.0, y: 1.0, z: 4.0 };
+        state.gyro = { pitch: -400, yaw: 600, roll: -600 };
+    }, 60);
+
+    // 3. Follow-through
+    setTimeout(() => {
         state.accel = { x: 1.2, y: -0.8, z: 0.6 };
         state.gyro = { pitch: -50, yaw: 100, roll: -100 };
-    }, 110);
+    }, 180);
 
-    // 3. Return to rest
+    // 4. Return to rest (Gravity)
     setTimeout(() => {
-        state.buttons['R1'] = false;
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
-    }, 250);
+    }, 320);
 }
 
 app.all('/api/swing', (req, res) => {
