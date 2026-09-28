@@ -295,11 +295,11 @@ export default function Controller() {
             }
 
             // 1. Tennis Physical Swing Detection
-            // A real swing is a strong physical stroke with linear acceleration (> 2.8 Gs), NOT just wrist rotation
+            // A real swing is a strong physical stroke with linear acceleration (> 1.7 Gs) or fast wrist rotation
             const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
             const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
 
-            if ((totalAccel > 2.8 || (totalAccel > 2.2 && rotMagnitude > 400)) && (now - lastSwingTime.current > 450)) {
+            if ((totalAccel > 1.7 || rotMagnitude > 250) && (now - lastSwingTime.current > 450)) {
                 lastSwingTime.current = now;
                 triggerSwing();
             }
@@ -345,9 +345,7 @@ export default function Controller() {
             
             socket.emit('controller-input', {
                 type: 'motion',
-                stick: { x: smoothStickX.current, y: smoothStickY.current },
-                accel: latestAccel.current,
-                gyro: latestGyro.current
+                stick: { x: smoothStickX.current, y: smoothStickY.current }
             });
             setStickDisplay({ x: smoothStickX.current, y: smoothStickY.current });
         }, 16);
