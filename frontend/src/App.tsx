@@ -63,20 +63,38 @@ function App() {
       const mjpegUrl = `${wsProtocol}//${window.location.host}/mjpeg-stream`;
       const mjpegWs = new WebSocket(mjpegUrl);
       
+      const img = new Image();
+      let isDecoding = false;
+      let pendingFrameData: string | null = null;
+
+      img.onload = () => {
+        requestAnimationFrame(() => {
+          if (canvasRef.current) {
+            const ctx = canvasRef.current.getContext('2d', { alpha: false });
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, 854, 480);
+            }
+          }
+          isDecoding = false;
+          // Instantly decode the next pending frame if one arrived while we were drawing
+          if (pendingFrameData) {
+            const data = pendingFrameData;
+            pendingFrameData = null;
+            isDecoding = true;
+            img.src = 'data:image/jpeg;base64,' + data;
+          }
+        });
+      };
+
       mjpegWs.onmessage = (event) => {
         if (!canvasRef.current || typeof event.data !== 'string') return;
-        const img = new Image();
-        img.onload = () => {
-          requestAnimationFrame(() => {
-            if (canvasRef.current) {
-              const ctx = canvasRef.current.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
-              }
-            }
-          });
-        };
-        img.src = 'data:image/jpeg;base64,' + event.data;
+        if (isDecoding) {
+          // Drop the old pending frame and replace it with this NEWER one
+          pendingFrameData = event.data;
+        } else {
+          isDecoding = true;
+          img.src = 'data:image/jpeg;base64,' + event.data;
+        }
       };
 
       // Store WS so we can close it
