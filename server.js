@@ -12,9 +12,9 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 // Raw WebSocket Server for JSMPEG Video Streaming (noServer so we can manually route upgrades)
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
 // WebSocket Server for zero-latency MJPEG video
-const wssMjpeg = new WebSocket.Server({ noServer: true });
+const wssMjpeg = new WebSocket.Server({ noServer: true, perMessageDeflate: false });
 
 server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
@@ -122,7 +122,10 @@ app.post('/api/start', (req, res) => {
         // Output 2 (pipe:3): MJPEG Video-only stream to Custom Canvas Player
         streamProcess = spawn('ffmpeg', [
             '-fflags', 'nobuffer',
+            '-probesize', '32',
+            '-analyzeduration', '0',
             '-f', 'x11grab',
+            '-draw_mouse', '0',
             '-thread_queue_size', '512',
             '-video_size', '854x480',
             '-framerate', '30',
@@ -131,9 +134,9 @@ app.post('/api/start', (req, res) => {
             '-thread_queue_size', '512',
             '-i', 'default',
             
-            // Audio Output
+            // Audio Output (MPEG-TS)
             '-f', 'mpegts',
-            '-vn', // No video
+            '-vn',
             '-codec:a', 'mp2',
             '-ar', '44100',
             '-ac', '2',
@@ -141,12 +144,13 @@ app.post('/api/start', (req, res) => {
             '-muxdelay', '0.001',
             'pipe:1',
             
-            // Video Output
+            // Video Output (MJPEG)
             '-f', 'image2pipe',
             '-vcodec', 'mjpeg',
             '-s', '640x360',
-            '-q:v', '6', // Decent quality, low bitrate
-            '-an', // No audio
+            '-q:v', '4', // High quality, zero latency drop logic handles bandwidth spikes
+            '-threads', '2', // Explicitly multi-thread JPEG encoding for lowest latency
+            '-an',
             'pipe:3'
         ], {
             stdio: ['ignore', 'pipe', 'pipe', 'pipe']
