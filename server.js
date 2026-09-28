@@ -138,6 +138,7 @@ app.post('/api/start', (req, res) => {
             '-ar', '44100',
             '-ac', '2',
             '-b:a', '128k',
+            '-muxdelay', '0.001',
             'pipe:1',
             
             // Video Output

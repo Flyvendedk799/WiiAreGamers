@@ -67,12 +67,14 @@ function App() {
         if (!canvasRef.current || typeof event.data !== 'string') return;
         const img = new Image();
         img.onload = () => {
-          if (canvasRef.current) {
-            const ctx = canvasRef.current.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
+          requestAnimationFrame(() => {
+            if (canvasRef.current) {
+              const ctx = canvasRef.current.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, canvasRef.current.width, canvasRef.current.height);
+              }
             }
-          }
+          });
         };
         img.src = 'data:image/jpeg;base64,' + event.data;
       };
