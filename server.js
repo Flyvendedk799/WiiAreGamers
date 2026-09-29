@@ -6,6 +6,8 @@ const { spawn } = require('child_process');
 const path = require('path');
 const dgram = require('dgram');
 const fs = require('fs');
+const { attachAccountApi, readSessionUser, notePlay, noteStop, MESSAGES } = require('./lib/accounts');
+const { findGame, resolveRomPath, listGames } = require('./lib/catalog');
 
 const app = express();
 const server = http.createServer(app);
@@ -46,27 +48,87 @@ server.on('upgrade', (request, socket, head) => {
 
 app.use(express.static(path.join(__dirname, 'frontend/dist')));
 app.use(express.json());
+attachAccountApi(app);
+
+app.get('/api/games', (req, res) => {
+    if (!readSessionUser(req)) {
+        return res.status(401).json({ error: 'signed_out', message: MESSAGES.signed_out });
+    }
+    const romDir = path.join(__dirname, 'roms');
+    if (!fs.existsSync(romDir)) fs.mkdirSync(romDir, { recursive: true });
+    res.json({ games: listGames(__dirname) });
+});
 
 let emulatorProcess = null;
 let streamProcess = null;
+let sessionGameId = null;
+let hostRunning = false;
+let activeUserId = null;
 
 // UDP socket for DSU (iOS app sends here natively, or our wrapper sends here)
 const udpSocket = dgram.createSocket('udp4');
 udpSocket.bind(26760, () => console.log('UDP DSU listener on 26760 (For iOS DSUController)'));
 
-app.post('/api/start', (req, res) => {
-    if (remoteHostSocket) {
-        remoteHostSocket.emit('start-game');
-        return res.json({ status: 'started_on_host' });
+app.post('/api/start', async (req, res) => {
+    const user = readSessionUser(req);
+    if (!user) {
+        return res.status(401).json({ error: 'signed_out', message: MESSAGES.signed_out });
     }
-    if (emulatorProcess) {
-        return res.json({ status: 'already_running' });
+    const gameId = String(req.body?.gameId || 'wii-sports');
+    const game = findGame(gameId);
+    if (!game) {
+        return res.status(404).json({ error: 'unknown_game', message: MESSAGES.unknown_game });
     }
 
-    // Use the bundled Wii Sports ROM to guarantee an immediate playable state
-    const romPath = process.env.ROM_PATH || path.join(__dirname, 'game.wbfs');
+    if (remoteHostSocket) {
+        const result = await new Promise((resolve) => {
+            const timer = setTimeout(() => resolve({ ok: true, status: 'started_on_host' }), 1200);
+            remoteHostSocket.once('host-start-result', (payload) => {
+                clearTimeout(timer);
+                resolve(payload || { ok: true, status: 'started_on_host' });
+            });
+            remoteHostSocket.emit('start-game', { gameId });
+        });
+        if (!result.ok) {
+            return res.status(409).json({
+                error: result.error || 'rom_missing',
+                message: 'Your copy of this disc is not on the console yet.',
+                gameId,
+                fileHint: game.fileHint,
+            });
+        }
+        if (!hostRunning) notePlay(user.id, gameId);
+        sessionGameId = gameId;
+        hostRunning = true;
+        activeUserId = user.id;
+        return res.json({ status: result.status || 'started_on_host', gameId });
+    }
+    if (emulatorProcess) {
+        return res.json({ status: 'already_running', gameId: sessionGameId });
+    }
+
+    const romPath = resolveRomPath(gameId, __dirname);
+    if (!romPath) {
+        return res.status(409).json({
+            error: 'rom_missing',
+            message: 'Your copy of this disc is not in the roms folder yet.',
+            gameId,
+            fileHint: game.fileHint,
+        });
+    }
+
     // Debian installs games to /usr/games, which isn't in PATH by default. Use nogui version for better headless performance.
-    const dolphinPath = '/usr/games/dolphin-emu-nogui';
+    const dolphinPath = process.env.DOLPHIN_PATH || '/usr/games/dolphin-emu-nogui';
+    if (!fs.existsSync(dolphinPath)) {
+        return res.status(503).json({
+            error: 'console_offline',
+            message: 'The console is not running on this machine.',
+            gameId,
+        });
+    }
+    sessionGameId = gameId;
+    activeUserId = user.id;
+    notePlay(user.id, gameId);
     
     // Clean up any stale X11 lock files or zombie processes
     try {
@@ -139,6 +201,9 @@ app.post('/api/start', (req, res) => {
             emulatorProcess = null;
             if (streamProcess) streamProcess.kill();
             xvfbProcess.kill();
+            if (activeUserId) noteStop(activeUserId);
+            sessionGameId = null;
+            io.emit('game-stopped');
         });
 
         // Start FFmpeg to capture video and stereo audio
@@ -238,10 +303,19 @@ app.post('/api/start', (req, res) => {
         });
     }, 600);
 
-    res.json({ status: 'started' });
+    res.json({ status: 'started', gameId: sessionGameId });
 });
 
 app.post('/api/stop', (req, res) => {
+    const user = readSessionUser(req);
+    if (!user) {
+        return res.status(401).json({ error: 'signed_out', message: MESSAGES.signed_out });
+    }
+    noteStop(user.id);
+    if (remoteHostSocket) remoteHostSocket.emit('stop-game');
+    hostRunning = false;
+    sessionGameId = null;
+    activeUserId = null;
     if (emulatorProcess) {
         emulatorProcess.kill();
         emulatorProcess = null;
@@ -283,7 +357,8 @@ app.post('/api/press-ab', (req, res) => {
 
 app.get('/api/status', (req, res) => {
     res.json({
-        running: !!emulatorProcess,
+        running: !!(emulatorProcess || hostRunning),
+        gameId: sessionGameId,
         partyCode: currentPartyCode,
         players: activePlayers.length
     });
@@ -318,39 +393,43 @@ app.all('/api/set-stick', (req, res) => {
     res.json({ status: 'ok', stick: { x, y }, slot });
 });
 
-function executeSwing(slot = 0) {
+const lastSwingAt = [0, 0, 0, 0];
+
+function executeToss(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
-    
-    // 1. Windup / Backswing (crucial for Wii Sports to detect a full stroke)
-    state.accel = { x: -1.0, y: 0.0, z: -1.5 };
-    state.gyro = { pitch: 100, yaw: -100, roll: 0 };
-    
-    // Force immediate UDP packet
-    for (const [key, client] of dolphinSubscribers.entries()) {
-        if (client.padId === undefined || client.padId === slot) {
-            const dsuPacket = dsu.createControllerPacket(state, slot);
-            udpSocket.send(dsuPacket, client.port, client.address);
-        }
-    }
-
-    // 2. Powerful forward strike
-    setTimeout(() => {
-        state.accel = { x: 5.0, y: 1.0, z: 4.0 };
-        state.gyro = { pitch: -400, yaw: 600, roll: -600 };
-    }, 30);
-
-    // 3. Follow-through
-    setTimeout(() => {
-        state.accel = { x: 1.2, y: -0.8, z: 0.6 };
-        state.gyro = { pitch: -50, yaw: 100, roll: -100 };
-    }, 120);
-
-    // 4. Return to rest (Gravity)
+    const now = Date.now();
+    if (now - lastSwingAt[slot] < 300) return;
+    lastSwingAt[slot] = now;
+    state.accel = { x: 0.1, y: 1.8, z: 0.1 };
+    state.gyro = { pitch: -220, yaw: 0, roll: 0 };
     setTimeout(() => {
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
-    }, 250);
+    }, 140);
+}
+
+function executeSwing(slot = 0) {
+    const state = controllerStates[slot];
+    if (!state) return;
+    const now = Date.now();
+    if (now - lastSwingAt[slot] < 300) return;
+    lastSwingAt[slot] = now;
+
+    // Horizontal forehand. Y stays at gravity so Wii Sports reads a hit, not a toss.
+    const frames = [
+        [0,   { x: -2.2, y: -1.0, z: 0.2 }, { pitch: 0, yaw: -90, roll: 40 }],
+        [45,  { x: 0.3, y: -1.0, z: 2.6 },  { pitch: -40, yaw: 700, roll: -240 }],
+        [95,  { x: 3.8, y: -1.0, z: 1.5 },  { pitch: -70, yaw: 1300, roll: -520 }],
+        [160, { x: 0.6, y: -1.0, z: -0.4 }, { pitch: -15, yaw: 200, roll: -60 }],
+        [240, { x: 0.0, y: -1.0, z: 0.0 },  { pitch: 0, yaw: 0, roll: 0 }]
+    ];
+    for (const [t, accel, gyro] of frames) {
+        setTimeout(() => {
+            state.accel = accel;
+            state.gyro = gyro;
+        }, t);
+    }
 }
 
 app.all('/api/swing', (req, res) => {
@@ -361,6 +440,16 @@ app.all('/api/swing', (req, res) => {
     }
     executeSwing(slot);
     res.json({ status: 'swung', slot });
+});
+
+app.all('/api/toss', (req, res) => {
+    const slot = req.query.slot ? parseInt(req.query.slot) : (req.body?.slot ?? 0);
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('remote-action', { action: 'toss', slot });
+        return res.json({ status: 'relayed', slot });
+    }
+    executeToss(slot);
+    res.json({ status: 'tossed', slot });
 });
 
 app.all('/api/aim', (req, res) => {
@@ -551,6 +640,17 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('toss', () => {
+        let slot = activePlayers.indexOf(socket.id);
+        if (slot === -1) slot = 0;
+
+        if (remoteHostSocket) {
+            remoteHostSocket.emit('remote-action', { action: 'toss', slot });
+        } else {
+            executeToss(slot);
+        }
+    });
+
     socket.on('disconnect', () => {
         const slot = activePlayers.indexOf(socket.id);
         if (slot !== -1) {
@@ -568,13 +668,15 @@ io.on('connection', (socket) => {
     });
 });
 
-// Provide a fallback route for react router
+// Provide a fallback route for the console. A root-relative name avoids
+// Express encoding a Windows absolute path into a URL and 404ing.
+const indexHtml = path.join(__dirname, 'frontend', 'dist');
 app.use((req, res, next) => {
-    if (req.method === 'GET' || req.method === 'HEAD') {
-        res.sendFile(path.join(__dirname, 'frontend/dist/index.html'));
-    } else {
-        next();
-    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile('index.html', { root: indexHtml }, (err) => {
+        if (err) next(err);
+    });
 });
 
 const PORT = process.env.PORT || 8080;

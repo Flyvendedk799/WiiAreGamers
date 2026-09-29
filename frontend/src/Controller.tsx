@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import io from 'socket.io-client';
 import './Controller.css';
+import { WiimoteMotionEngine } from './wiimote-motion';
 
 const socket = io(window.location.origin, { transports: ['websocket'] });
 
@@ -34,7 +35,7 @@ export default function Controller() {
     const [gyroAimActive, setGyroAimActive] = useState(true);
     const [sensitivity, setSensitivity] = useState<'normal' | 'fast' | 'smooth'>('normal');
     const [showPwaTip, setShowPwaTip] = useState(false);
-    const [recenteredToast, setRecenteredToast] = useState(false);
+    const [motionToast, setMotionToast] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(false);
     const [stickDisplay, setStickDisplay] = useState({ x: 0, y: 0 });
     
@@ -69,6 +70,9 @@ export default function Controller() {
 
     const latestAccel = useRef({ x: 0, y: -1, z: 0 });
     const latestGyro = useRef({ pitch: 0, yaw: 0, roll: 0 });
+    const wiimoteAccel = useRef({ x: 0, y: -1, z: 0 });
+    const wiimoteGyro = useRef({ pitch: 0, yaw: 0, roll: 0 });
+    const motionEngine = useRef(new WiimoteMotionEngine());
 
     const wakeLockRef = useRef<any>(null);
 
@@ -175,17 +179,14 @@ export default function Controller() {
     };
 
     const triggerSwing = () => {
+        // Motion sensors are the remote. A scripted swing would overwrite the real one.
+        if (gyroEnabled) return;
         lastSwingTime.current = Date.now();
         playHapticThump(40, 0.12);
         try { if (navigator.vibrate) navigator.vibrate([40, 20, 60]); } catch (e) {}
         setSwingEffect(true);
         setTimeout(() => setSwingEffect(false), 300);
         socket.emit('swing');
-        fetch('/api/swing', { 
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ slot: (joinedSlot ? joinedSlot - 1 : 0) })
-        }).catch(() => {});
     };
 
     // Center laser aim to current wrist orientation
@@ -210,8 +211,12 @@ export default function Controller() {
             stick: { x: 0, y: 0 }
         });
 
-        setRecenteredToast(true);
-        setTimeout(() => setRecenteredToast(false), 900);
+        showMotionToast('Pointer centered');
+    };
+
+    const showMotionToast = (message: string) => {
+        setMotionToast(message);
+        setTimeout(() => setMotionToast(null), 1400);
     };
 
     const enableSensors = () => {
@@ -288,20 +293,25 @@ export default function Controller() {
             latestGyro.current = { pitch, yaw, roll };
 
             const now = Date.now();
+            const posed = motionEngine.current.update(
+                { accel: acc, rotationRate: rot },
+                now
+            );
+            wiimoteAccel.current = posed.accel;
+            wiimoteGyro.current = posed.gyro;
 
             if (baseAy.current === null) {
                 baseAx.current = ax;
                 baseAy.current = ay;
             }
 
-            // 1. Tennis Physical Swing Detection
-            // A real swing is a strong physical stroke with linear acceleration (> 1.7 Gs) or fast wrist rotation
-            const totalAccel = Math.sqrt(ax * ax + ay * ay + az * az);
-            const rotMagnitude = Math.sqrt(pitch * pitch + yaw * yaw + roll * roll);
-
-            if ((totalAccel > 1.25 || rotMagnitude > 130) && (now - lastSwingTime.current > 450)) {
-                lastSwingTime.current = now;
-                triggerSwing();
+            if (socket.connected) {
+                socket.emit('controller-input', {
+                    type: 'motion',
+                    accel: posed.accel,
+                    gyro: posed.gyro,
+                    stick: { x: smoothStickX.current, y: smoothStickY.current }
+                });
             }
 
             // 2. High-Frequency Fallback Pointer Fusion (if DeviceOrientation is not firing)
@@ -340,11 +350,10 @@ export default function Controller() {
     useEffect(() => {
         if (!gyroEnabled || !connected) return;
         const interval = setInterval(() => {
-            const now = Date.now();
-            if (now - lastSwingTime.current < 380) return; // mid-swing freeze
-            
             socket.emit('controller-input', {
                 type: 'motion',
+                accel: wiimoteAccel.current,
+                gyro: wiimoteGyro.current,
                 stick: { x: smoothStickX.current, y: smoothStickY.current }
             });
             setStickDisplay({ x: smoothStickX.current, y: smoothStickY.current });
@@ -398,13 +407,14 @@ export default function Controller() {
 
     if (!joinedSlot) {
         return (
+            <div className="controller-root">
             <div className="controller-join-screen">
                 <div className="join-card">
-                    <h2>🎮 Join Wii Party</h2>
+                    <h2>Join the room</h2>
                     {joinError && <p className="join-error">{joinError}</p>}
                     <input 
                         type="text" 
-                        placeholder="ENTER 4-LETTER CODE"
+                        placeholder="PARTY CODE"
                         value={partyCodeInput}
                         onChange={(e) => setPartyCodeInput(e.target.value.toUpperCase())}
                         maxLength={6}
@@ -412,8 +422,9 @@ export default function Controller() {
                     <button onClick={joinParty} className="btn-join">
                         Connect Controller
                     </button>
-                    <p className="join-hint">Hold phone pointing towards TV for laser aim.</p>
+                    <p className="join-hint">Point the top of the phone at the television.</p>
                 </div>
+            </div>
             </div>
         );
     }
@@ -422,6 +433,7 @@ export default function Controller() {
     const pColor = playerColors[(joinedSlot - 1) % playerColors.length];
 
     return (
+        <div className="controller-root">
         <div className={`controller-ui ${swingEffect ? 'swing-active' : ''}`}>
             {/* iOS PWA Home Screen Banner */}
             {showPwaTip && (
@@ -432,9 +444,9 @@ export default function Controller() {
             )}
 
             {/* Recenter Toast */}
-            {recenteredToast && (
+            {motionToast && (
                 <div className="recenter-toast">
-                    🎯 Pointer Centered!
+                    {motionToast}
                 </div>
             )}
 
@@ -479,6 +491,9 @@ export default function Controller() {
                                 {gyroAimActive ? 'Laser Aim: ON' : 'Laser Aim: OFF'}
                             </button>
                         </div>
+                        <p className="stance-hint">
+                            Looking at the screen is the remote lying flat. Point the top of the phone up to stand it up, then swing.
+                        </p>
                         <div className="sensitivity-selector">
                             <span className="sens-label">Speed:</span>
                             <button 
@@ -504,7 +519,7 @@ export default function Controller() {
                 onTouchStart={(e) => { e.preventDefault(); triggerSwing(); }}
                 onMouseDown={(e) => { e.preventDefault(); triggerSwing(); }}
             >
-                🎾 SWING / HIT
+                {gyroEnabled ? 'Swing the phone' : '🎾 SWING / HIT'}
             </button>
 
             {/* Interactive Aim Trackpad with Real-Time Aim Reticle */}
@@ -617,6 +632,7 @@ export default function Controller() {
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     );
 }
