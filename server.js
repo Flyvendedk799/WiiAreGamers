@@ -318,39 +318,43 @@ app.all('/api/set-stick', (req, res) => {
     res.json({ status: 'ok', stick: { x, y }, slot });
 });
 
-function executeSwing(slot = 0) {
+const lastSwingAt = [0, 0, 0, 0];
+
+function executeToss(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
-    
-    // 1. Windup / Backswing (crucial for Wii Sports to detect a full stroke)
-    state.accel = { x: -1.0, y: 0.0, z: -1.5 };
-    state.gyro = { pitch: 100, yaw: -100, roll: 0 };
-    
-    // Force immediate UDP packet
-    for (const [key, client] of dolphinSubscribers.entries()) {
-        if (client.padId === undefined || client.padId === slot) {
-            const dsuPacket = dsu.createControllerPacket(state, slot);
-            udpSocket.send(dsuPacket, client.port, client.address);
-        }
-    }
-
-    // 2. Powerful forward strike
-    setTimeout(() => {
-        state.accel = { x: 5.0, y: 1.0, z: 4.0 };
-        state.gyro = { pitch: -400, yaw: 600, roll: -600 };
-    }, 30);
-
-    // 3. Follow-through
-    setTimeout(() => {
-        state.accel = { x: 1.2, y: -0.8, z: 0.6 };
-        state.gyro = { pitch: -50, yaw: 100, roll: -100 };
-    }, 120);
-
-    // 4. Return to rest (Gravity)
+    const now = Date.now();
+    if (now - lastSwingAt[slot] < 300) return;
+    lastSwingAt[slot] = now;
+    state.accel = { x: 0.1, y: 1.8, z: 0.1 };
+    state.gyro = { pitch: -220, yaw: 0, roll: 0 };
     setTimeout(() => {
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
-    }, 250);
+    }, 140);
+}
+
+function executeSwing(slot = 0) {
+    const state = controllerStates[slot];
+    if (!state) return;
+    const now = Date.now();
+    if (now - lastSwingAt[slot] < 300) return;
+    lastSwingAt[slot] = now;
+
+    // Horizontal forehand. Y stays at gravity so Wii Sports reads a hit, not a toss.
+    const frames = [
+        [0,   { x: -2.2, y: -1.0, z: 0.2 }, { pitch: 0, yaw: -90, roll: 40 }],
+        [45,  { x: 0.3, y: -1.0, z: 2.6 },  { pitch: -40, yaw: 700, roll: -240 }],
+        [95,  { x: 3.8, y: -1.0, z: 1.5 },  { pitch: -70, yaw: 1300, roll: -520 }],
+        [160, { x: 0.6, y: -1.0, z: -0.4 }, { pitch: -15, yaw: 200, roll: -60 }],
+        [240, { x: 0.0, y: -1.0, z: 0.0 },  { pitch: 0, yaw: 0, roll: 0 }]
+    ];
+    for (const [t, accel, gyro] of frames) {
+        setTimeout(() => {
+            state.accel = accel;
+            state.gyro = gyro;
+        }, t);
+    }
 }
 
 app.all('/api/swing', (req, res) => {
@@ -361,6 +365,16 @@ app.all('/api/swing', (req, res) => {
     }
     executeSwing(slot);
     res.json({ status: 'swung', slot });
+});
+
+app.all('/api/toss', (req, res) => {
+    const slot = req.query.slot ? parseInt(req.query.slot) : (req.body?.slot ?? 0);
+    if (remoteHostSocket) {
+        remoteHostSocket.emit('remote-action', { action: 'toss', slot });
+        return res.json({ status: 'relayed', slot });
+    }
+    executeToss(slot);
+    res.json({ status: 'tossed', slot });
 });
 
 app.all('/api/aim', (req, res) => {
@@ -548,6 +562,17 @@ io.on('connection', (socket) => {
             remoteHostSocket.emit('remote-action', { action: 'swing', slot });
         } else {
             executeSwing(slot);
+        }
+    });
+
+    socket.on('toss', () => {
+        let slot = activePlayers.indexOf(socket.id);
+        if (slot === -1) slot = 0;
+
+        if (remoteHostSocket) {
+            remoteHostSocket.emit('remote-action', { action: 'toss', slot });
+        } else {
+            executeToss(slot);
         }
     });
 
