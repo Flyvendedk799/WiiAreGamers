@@ -168,14 +168,6 @@ function App() {
     }).catch(() => {});
   };
 
-  const triggerSwing = () => {
-    fetch('/api/swing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slot: 0 })
-    }).catch(() => {});
-  };
-
   const toggleFullscreen = () => {
     const el = document.getElementById('video-wrapper');
     if (!el) return;
@@ -292,22 +284,6 @@ function App() {
                 }}
               >
                 {isAudioEnabled ? '🔊 Sound Active' : '🔇 Enable Sound'}
-              </button>
-
-              <button 
-                onClick={triggerSwing}
-                style={{
-                  background: 'linear-gradient(135deg, #ff6b35, #f72585)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '8px 14px',
-                  borderRadius: '6px',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)'
-                }}
-              >
-                🎾 Swing / Hit
               </button>
 
               <button 

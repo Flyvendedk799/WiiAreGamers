@@ -73,6 +73,13 @@ export default function Controller() {
     const wiimoteAccel = useRef({ x: 0, y: -1, z: 0 });
     const wiimoteGyro = useRef({ pitch: 0, yaw: 0, roll: 0 });
     const motionEngine = useRef(new WiimoteMotionEngine());
+    const lastSensors = useRef<{
+        accel: { x: number | null; y: number | null; z: number | null };
+        rotationRate: { alpha: number | null; beta: number | null; gamma: number | null };
+    } | null>(null);
+    const lastEngineAt = useRef(0);
+    const sensorCleanup = useRef<(() => void) | null>(null);
+    const stillAimMs = useRef(0);
 
     const wakeLockRef = useRef<any>(null);
 
@@ -220,11 +227,12 @@ export default function Controller() {
     };
 
     const enableSensors = () => {
+        sensorCleanup.current?.();
         setGyroEnabled(true);
         lastMotionTime.current = Date.now();
 
         // Engine 1: Absolute Hardware Attitude from DeviceOrientation (Zero Drift)
-        window.addEventListener('deviceorientation', (event) => {
+        const onOrientation = (event: DeviceOrientationEvent) => {
             let yaw = 0;
             if ((event as any).webkitCompassHeading !== undefined && (event as any).webkitCompassHeading !== null) {
                 yaw = (event as any).webkitCompassHeading;
@@ -272,13 +280,13 @@ export default function Controller() {
             // Smooth with low-pass filter (snappier, ultra-low latency response)
             smoothStickX.current = smoothStickX.current * 0.40 + targetX * 0.60;
             smoothStickY.current = smoothStickY.current * 0.40 + targetY * 0.60;
-        });
+        };
 
         // Engine 2: High-Frequency DeviceMotion for Tennis Swings & Gyro Integration Fallback
-        window.addEventListener('devicemotion', (event) => {
-            const acc = event.accelerationIncludingGravity || event.acceleration;
+        const onMotion = (event: DeviceMotionEvent) => {
+            const acc = event.accelerationIncludingGravity;
             const rot = event.rotationRate;
-            if (!acc) return;
+            if (!acc || acc.x == null || acc.y == null || acc.z == null) return;
 
             const G = 9.80665;
             const ax = -(acc.x || 0) / G;
@@ -293,12 +301,41 @@ export default function Controller() {
             latestGyro.current = { pitch, yaw, roll };
 
             const now = Date.now();
+            lastSensors.current = {
+                accel: { x: acc.x, y: acc.y, z: acc.z },
+                rotationRate: {
+                    alpha: rot?.alpha ?? null,
+                    beta: rot?.beta ?? null,
+                    gamma: rot?.gamma ?? null
+                }
+            };
+            lastEngineAt.current = now;
             const posed = motionEngine.current.update(
-                { accel: acc, rotationRate: rot },
+                lastSensors.current,
                 now
             );
             wiimoteAccel.current = posed.accel;
             wiimoteGyro.current = posed.gyro;
+
+            // Aiming inside the window stays where you hold it. A pose that
+            // pins the pointer in a corner, like lifting the phone up for
+            // the bat, recenters once it has been held still.
+            const gMag = Math.hypot(acc.x, acc.y, acc.z) / G;
+            const heldStill = gMag > 0.9 && gMag < 1.08 && Math.hypot(yaw, pitch, roll) < 23;
+            const aimYaw = ((currentYaw.current - (baseYaw.current ?? currentYaw.current) + 540) % 360) - 180;
+            const aimPitch = currentPitch.current - (basePitch.current ?? currentPitch.current);
+            const pinned = Math.abs(aimYaw) > 14 || Math.abs(aimPitch) > 8;
+            if (heldStill && pinned && gyroAimActive && !isTouchingTrackpad.current) {
+                stillAimMs.current += 16;
+                if (stillAimMs.current > 200) {
+                    baseYaw.current = currentYaw.current;
+                    basePitch.current = currentPitch.current;
+                    baseRoll.current = currentRoll.current;
+                    stillAimMs.current = 0;
+                }
+            } else if (!heldStill) {
+                stillAimMs.current = 0;
+            }
 
             if (baseAy.current === null) {
                 baseAx.current = ax;
@@ -343,13 +380,43 @@ export default function Controller() {
             } else {
                 lastMotionTime.current = now;
             }
-        });
+        };
+        window.addEventListener('deviceorientation', onOrientation);
+        window.addEventListener('devicemotion', onMotion);
+        sensorCleanup.current = () => {
+            window.removeEventListener('deviceorientation', onOrientation);
+            window.removeEventListener('devicemotion', onMotion);
+        };
     };
+
+    useEffect(() => {
+        return () => { sensorCleanup.current?.(); };
+    }, []);
 
     // Continuous 60Hz ultra-low latency input stream to Dolphin
     useEffect(() => {
         if (!gyroEnabled || !connected) return;
         const interval = setInterval(() => {
+            const now = Date.now();
+            // Only when motion events have actually stalled. A normal stream
+            // is faster than this, and a zero gyro in between would eat a twist.
+            if (lastSensors.current && now - lastEngineAt.current > 70) {
+                const stalled = lastSensors.current.accel;
+                const mag = Math.hypot(stalled.x ?? NaN, stalled.y ?? NaN, stalled.z ?? NaN) / 9.80665;
+                // A stalled shove is not a new sample. Counting it again can
+                // turn a pull toward the hand into an up swing. A stalled
+                // reading near one gravity is still the pose, so advance that,
+                // with the twist stopped.
+                if (mag > 0.9 && mag < 1.08) {
+                    const posed = motionEngine.current.update({
+                        accel: lastSensors.current.accel,
+                        rotationRate: { alpha: 0, beta: 0, gamma: 0 }
+                    }, now);
+                    wiimoteAccel.current = posed.accel;
+                    wiimoteGyro.current = posed.gyro;
+                    lastEngineAt.current = now;
+                }
+            }
             socket.emit('controller-input', {
                 type: 'motion',
                 accel: wiimoteAccel.current,
