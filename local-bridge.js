@@ -3,6 +3,8 @@ const WebSocket = require('ws');
 const dgram = require('dgram');
 const { spawn } = require('child_process');
 const { DSUPacker } = require('./dsu-packer');
+const fs = require('fs');
+const { resolveRomPath } = require('./lib/catalog');
 
 // CONFIGURATION:
 const VPS_URL = 'https://wii.mast3kmedia.dk';
@@ -88,14 +90,23 @@ socket.on('connect', () => {
     socket.emit('register-host', 'SUPER_SECRET_KEY');
 });
 
-socket.on('start-game', () => {
-    console.log('Start Game requested from VPS! Launching Dolphin on your PC...');
+socket.on('start-game', (payload) => {
+    const gameId = (payload && payload.gameId) || 'wii-sports';
+    console.log('Start Game requested from VPS! Launching Dolphin on your PC...', gameId);
     if (dolphinProcess) {
         console.log('Dolphin is already running.');
+        socket.emit('host-start-result', { ok: true, status: 'already_running', gameId });
         return;
     }
+    const romPath = resolveRomPath(gameId, __dirname) || (gameId === 'wii-sports' && fs.existsSync(ROM_PATH) ? ROM_PATH : null);
+    if (!romPath) {
+        console.log('Disc not found for', gameId);
+        socket.emit('host-start-result', { ok: false, error: 'rom_missing', gameId });
+        return;
+    }
+    socket.emit('host-start-result', { ok: true, status: 'started_on_host', gameId });
     dolphinProcess = spawn(DOLPHIN_PATH, [
-        '-b', '-e', ROM_PATH,
+        '-b', '-e', romPath,
         '--config=Dolphin.Input.BackgroundInput=True',
         '--config=Dolphin.Core.BackgroundInput=True',
         '--config=Dolphin.Core.EnableAlternateInputSources=True',

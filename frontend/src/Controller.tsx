@@ -474,13 +474,14 @@ export default function Controller() {
 
     if (!joinedSlot) {
         return (
+            <div className="controller-root">
             <div className="controller-join-screen">
                 <div className="join-card">
-                    <h2>🎮 Join Wii Party</h2>
+                    <h2>Join the room</h2>
                     {joinError && <p className="join-error">{joinError}</p>}
                     <input 
                         type="text" 
-                        placeholder="ENTER 4-LETTER CODE"
+                        placeholder="PARTY CODE"
                         value={partyCodeInput}
                         onChange={(e) => setPartyCodeInput(e.target.value.toUpperCase())}
                         maxLength={6}
@@ -488,8 +489,9 @@ export default function Controller() {
                     <button onClick={joinParty} className="btn-join">
                         Connect Controller
                     </button>
-                    <p className="join-hint">Hold phone pointing towards TV for laser aim.</p>
+                    <p className="join-hint">Point the top of the phone at the television.</p>
                 </div>
+            </div>
             </div>
         );
     }
@@ -498,6 +500,7 @@ export default function Controller() {
     const pColor = playerColors[(joinedSlot - 1) % playerColors.length];
 
     return (
+        <div className="controller-root">
         <div className={`controller-ui ${swingEffect ? 'swing-active' : ''}`}>
             {/* iOS PWA Home Screen Banner */}
             {showPwaTip && (
@@ -696,6 +699,7 @@ export default function Controller() {
                     </div>
                 </div>
             </div>
+        </div>
         </div>
     );
 }

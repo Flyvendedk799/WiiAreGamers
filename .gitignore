@@ -9,3 +9,11 @@ screen*.b64
 screen*.jpg
 *.b64
 node_modules/
+data/
+roms/
+*.wbfs
+*.iso
+*.rvz
+*.wad
+*.gcm
+*.gcz
