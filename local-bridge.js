@@ -32,19 +32,28 @@ let videoSocket = null;
 
 const lastSwingAt = [0, 0, 0, 0];
 const swingLockUntil = [0, 0, 0, 0];
+const lastPhoneMotionAt = [0, 0, 0, 0];
+const motionEpoch = [0, 0, 0, 0];
+
+function phoneIsLive(slot) {
+    return Date.now() - lastPhoneMotionAt[slot] < 400;
+}
 
 function executeToss(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
+    // The phone is already the remote. A scripted toss would replace it.
+    if (phoneIsLive(slot)) return;
     const now = Date.now();
     if (now - lastSwingAt[slot] < 300) return;
     lastSwingAt[slot] = now;
     swingLockUntil[slot] = now + 180;
+    const epoch = ++motionEpoch[slot];
     // Upward flick only. Wii Sports treats +Y as the serve toss.
     state.accel = { x: 0.1, y: 1.8, z: 0.1 };
     state.gyro = { pitch: -220, yaw: 0, roll: 0 };
     setTimeout(() => {
-        if (lastSwingAt[slot] !== now) return;
+        if (motionEpoch[slot] !== epoch) return;
         state.accel = { x: 0.0, y: -1.0, z: 0.0 };
         state.gyro = { pitch: 0, yaw: 0, roll: 0 };
     }, 140);
@@ -53,10 +62,12 @@ function executeToss(slot = 0) {
 function executeSwing(slot = 0) {
     const state = controllerStates[slot];
     if (!state) return;
+    if (phoneIsLive(slot)) return;
     const now = Date.now();
     if (now - lastSwingAt[slot] < 300) return;
     lastSwingAt[slot] = now;
     swingLockUntil[slot] = now + 280;
+    const epoch = ++motionEpoch[slot];
     // Horizontal forehand. Y stays at gravity so this is a hit, not another toss.
     const frames = [
         [0,   { x: -2.2, y: -1.0, z: 0.2 }, { pitch: 0, yaw: -90, roll: 40 }],
@@ -67,6 +78,7 @@ function executeSwing(slot = 0) {
     ];
     for (const [t, accel, gyro] of frames) {
         setTimeout(() => {
+            if (motionEpoch[slot] !== epoch) return;
             state.accel = accel;
             state.gyro = gyro;
         }, t);
@@ -161,6 +173,8 @@ socket.on('remote-input', ({ slot, data }) => {
     if (data.type === 'button') {
         state.buttons[data.btn] = data.state;
     } else if (data.type === 'motion') {
+        lastPhoneMotionAt[slot] = Date.now();
+        motionEpoch[slot]++;
         if (data.accel) state.accel = data.accel;
         if (data.gyro) state.gyro = data.gyro;
         if (data.stick) state.stick = data.stick;

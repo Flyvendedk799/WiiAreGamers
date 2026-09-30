@@ -187,16 +187,6 @@ export function Theater({ id }: { id: string }) {
           )}
           <div className="stage-bar">
             <button onClick={unlockAudio}>{isAudioEnabled ? 'Sound on' : 'Sound'}</button>
-            {(controls === 'motion' || controls === 'party') && (
-              <button onClick={() => fetch('/api/swing', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot: 0 }) })}>
-                Swing
-              </button>
-            )}
-            {controls === 'motion' && (
-              <button onClick={() => fetch('/api/toss', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slot: 0 }) })}>
-                Toss
-              </button>
-            )}
             <button onClick={() => pressButton('A')}>A</button>
             <button onClick={() => pressButton('B')}>B</button>
             {controls === 'racing' && <button onClick={() => pressButton('+')}>+</button>}
